@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wczytaj faktury z dysku</title>
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.0.8/css/dataTables.dataTables.min.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #222; }
+    .container { max-width: 1100px; margin: 40px auto; padding: 0 16px; }
+
+    .tabs { display: flex; margin-bottom: 24px; border-bottom: 2px solid #e5e7eb; flex-wrap: wrap; }
+    .tabs a {
+      padding: 10px 20px; font-size: 0.95rem; font-weight: 500;
+      text-decoration: none; color: #555; border-bottom: 2px solid transparent; margin-bottom: -2px;
+    }
+    .tabs a:hover { color: #2563eb; }
+    .tabs a.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+
+    .filters {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+      padding: 14px 20px; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .filter-group { display: flex; align-items: center; gap: 8px; }
+    .filter-group label { font-size: 0.8rem; color: #555; font-weight: 600; }
+    .filter-group select { padding: 7px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; }
+    .btn { padding: 8px 18px; background: #2563eb; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; text-decoration: none; display: inline-block; }
+    .btn:hover { background: #1d4ed8; }
+    .btn:disabled { background: #93c5fd; cursor: not-allowed; }
+    .btn-ocr { background: #7c3aed; }
+    .btn-ocr:hover { background: #6d28d9; }
+    .btn-ocr:disabled { background: #c4b5fd; }
+
+    .alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; font-size: 0.9rem; }
+    .alert-error { background: #fee2e2; border: 1px solid #fca5a5; color: #b91c1c; }
+    .alert-warn  { background: #fef9c3; border: 1px solid #fde047; color: #854d0e; }
+    .empty { text-align: center; color: #9ca3af; padding: 40px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; }
+
+    .ocr-bar {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+      padding: 14px 20px; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .ocr-bar .sel-count { font-size: 0.88rem; color: #555; }
+    #progress-wrap { display: none; flex-direction: column; gap: 6px; width: 100%; }
+    #progress-bar-bg { background: #e5e7eb; border-radius: 4px; height: 8px; width: 100%; }
+    #progress-bar { background: #7c3aed; border-radius: 4px; height: 8px; width: 0%; transition: width 0.3s; }
+    #progress-log { font-size: 0.82rem; color: #555; max-height: 120px; overflow-y: auto; }
+    #progress-log div { padding: 1px 0; }
+    .log-ok    { color: #15803d; }
+    .log-skip  { color: #6b7280; }
+    .log-error { color: #b91c1c; }
+
+    .dt-container { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+    .dt-layout-row { margin-bottom: 12px; }
+    .dt-search input { padding: 7px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; }
+    .dt-length select { padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; }
+    .dt-paging .dt-paging-button { padding: 4px 10px; border-radius: 5px; cursor: pointer; }
+    .dt-paging .dt-paging-button.current { background: #2563eb; color: #fff !important; }
+    .dt-paging .dt-paging-button:hover:not(.current) { background: #e5e7eb; }
+
+    table.dataTable { width: 100% !important; border-collapse: collapse !important; }
+    table.dataTable thead th {
+      font-size: 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em;
+      border-bottom: 2px solid #e5e7eb !important; background: #f9fafb;
+      padding: 10px 13px; white-space: nowrap;
+    }
+    table.dataTable tbody td { padding: 9px 13px; font-size: 0.87rem; border-bottom: 1px solid #f3f4f6; }
+    table.dataTable tbody tr:last-child td { border-bottom: none; }
+    table.dataTable tbody tr:hover td { background: #f9fafb; }
+
+    .file-link { color: #2563eb; text-decoration: none; }
+    .file-link:hover { text-decoration: underline; }
+    .badge-done { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; background: #dcfce7; color: #15803d; vertical-align: middle; white-space: nowrap; }
+    .badge-new  { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; background: #fee2e2; color: #b91c1c; vertical-align: middle; white-space: nowrap; }
+    .path-note { font-size: 0.78rem; color: #6b7280; display: block; }
+    .count { font-size: 0.85rem; color: #666; margin-bottom: 10px; }
+
+    /* Checkbox column */
+    table.dataTable thead th:first-child,
+    table.dataTable tbody td:first-child { width: 32px; text-align: center; padding-left: 8px; padding-right: 8px; }
+    #check-all { cursor: pointer; }
+    .row-cb { cursor: pointer; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <nav class="tabs">
+    <a href="/kosztowe"          class="{{ 'active' if active == 'kosztowe' }}">Kosztowe</a>
+    <a href="/przychodowe"       class="{{ 'active' if active == 'przychodowe' }}">Przychodowe</a>
+    <a href="/transakcje"        class="{{ 'active' if active == 'transakcje' }}">Transakcje</a>
+    <a href="/faktury-na-dysku"  class="{{ 'active' if active == 'faktury-na-dysku' }}">Wczytaj faktury z dysku</a>
+    <a href="/faktury-google"    class="{{ 'active' if active == 'faktury-google' }}">Faktury na dysku Google</a>
+    <a href="/ustawienia"        class="{{ 'active' if active == 'ustawienia' }}">Ustawienia</a>
+  </nav>
+
+  {% if not api_configured %}
+  <div class="alert alert-warn">
+    Brak klucza Google Drive API. Dodaj <code>GOOGLE_DRIVE_API_KEY=...</code> do pliku <code>.env</code>
+    i zrestartuj serwer.<br>
+    <small>Jak uzyskać klucz: <strong>Google Cloud Console → APIs &amp; Services → Credentials → Create API Key</strong>
+    → ogranicz do Drive API.</small>
+  </div>
+  {% else %}
+
+  <form class="filters" method="get">
+    <div class="filter-group">
+      <label>Miesiąc i rok</label>
+      <select name="month">
+        {% for y, m in month_options %}
+        <option value="{{ m }}" {% if m == sel_month and y == sel_year %}selected{% endif %}>
+          {{ "%02d"|format(m) }}/{{ y }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Rok</label>
+      <select name="year">
+        {% set years = [] %}
+        {% for y, m in month_options %}{% if y not in years %}{% set _ = years.append(y) %}{% endif %}{% endfor %}
+        {% for y in years %}
+        <option value="{{ y }}" {% if y == sel_year %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn" type="submit">Pobierz</button>
+  </form>
+
+  {% if error %}
+  <div class="alert alert-error">{{ error }}</div>
+  {% elif files %}
+
+  <div class="ocr-bar">
+    <button id="btn-ocr" class="btn btn-ocr" disabled>Przetwórz OCR zaznaczone (0)</button>
+    <button id="btn-ocr-new" class="btn btn-ocr">Przetwórz wszystkie nowe</button>
+    <span class="sel-count" id="sel-count"></span>
+    <div id="progress-wrap">
+      <div id="progress-bar-bg"><div id="progress-bar"></div></div>
+      <div id="progress-log"></div>
+    </div>
+  </div>
+
+  <p class="count">Znaleziono: <strong>{{ files | length }}</strong> plików</p>
+  <div class="dt-container">
+  <table id="drive-table">
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="check-all" title="Zaznacz wszystkie"></th>
+        <th>#</th>
+        <th>Nazwa pliku</th>
+        <th>Ścieżka</th>
+        <th>Utworzony</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in files %}
+      <tr data-id="{{ f.id }}" data-name="{{ f.name }}">
+        <td><input class="row-cb" type="checkbox" value="{{ f.id }}" data-name="{{ f.name }}"></td>
+        <td>{{ loop.index }}</td>
+        <td>
+          {% if f.link %}
+          <a class="file-link" href="{{ f.link }}" target="_blank" rel="noopener">{{ f.name }}</a>
+          {% else %}
+          {{ f.name }}
+          {% endif %}
+          {% if f.id in processed_ids %}<span class="badge-done">Wczytane</span>{% else %}<span class="badge-new">Nowa</span>{% endif %}
+        </td>
+        <td><span class="path-note">{{ f.path }}</span></td>
+        <td>{{ f.created }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="empty">Brak plików dla <strong>{{ "%02d"|format(sel_month) }}/{{ sel_year }}</strong>.</p>
+  {% endif %}
+
+  {% endif %}
+
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/2.0.8/js/dataTables.min.js"></script>
+<script>
+$(function () {
+  if ($('#drive-table').length) {
+    $('#drive-table').DataTable({
+      order: [[3, 'desc']],
+      pageLength: 25,
+      lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'Wszystkie']],
+      columnDefs: [{ targets: 0, orderable: false, searchable: false }],
+      language: {
+        search:       'Szukaj:',
+        lengthMenu:   'Pokaż _MENU_ wpisów',
+        info:         'Pozycje _START_–_END_ z _TOTAL_',
+        infoEmpty:    'Brak wyników',
+        infoFiltered: '(przefiltrowano z _MAX_ wpisów)',
+        paginate:     { previous: '‹', next: '›' },
+        zeroRecords:  'Brak pasujących wyników',
+        emptyTable:   'Brak danych',
+      },
+    });
+  }
+
+  // Sync month select → year select
+  const monthSel = document.querySelector('select[name="month"]');
+  const yearSel  = document.querySelector('select[name="year"]');
+  const pairs    = {{ month_options | tojson }};
+  if (monthSel && yearSel) {
+    monthSel.addEventListener('change', function () {
+      const m = parseInt(this.value);
+      const pair = pairs.find(p => p[1] === m);
+      if (pair) yearSel.value = pair[0];
+    });
+  }
+
+  // Checkbox logic
+  function updateOcrButton() {
+    const checked = document.querySelectorAll('.row-cb:checked');
+    const btn = document.getElementById('btn-ocr');
+    const cnt = document.getElementById('sel-count');
+    if (!btn) return;
+    btn.textContent = `Przetwórz OCR zaznaczone (${checked.length})`;
+    btn.disabled = checked.length === 0;
+    cnt.textContent = checked.length > 0 ? `${checked.length} zaznaczonych` : '';
+  }
+
+  const checkAll = document.getElementById('check-all');
+  if (checkAll) {
+    checkAll.addEventListener('change', function () {
+      document.querySelectorAll('.row-cb').forEach(cb => cb.checked = this.checked);
+      updateOcrButton();
+    });
+  }
+  document.addEventListener('change', function (e) {
+    if (e.target.classList.contains('row-cb')) updateOcrButton();
+  });
+
+  // OCR processing — shared runner
+  async function runOcr(files) {
+    if (!files.length) return;
+    const btnOcr    = document.getElementById('btn-ocr');
+    const btnOcrNew = document.getElementById('btn-ocr-new');
+    if (btnOcr)    btnOcr.disabled    = true;
+    if (btnOcrNew) btnOcrNew.disabled = true;
+
+    document.getElementById('progress-wrap').style.display = 'flex';
+    document.getElementById('progress-log').innerHTML = '';
+    document.getElementById('progress-bar').style.width = '0%';
+
+    const log   = document.getElementById('progress-log');
+    const bar   = document.getElementById('progress-bar');
+    const total = files.length;
+
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      log.insertAdjacentHTML('beforeend', `<div>Przetwarzam: <strong>${f.name}</strong>…</div>`);
+      log.scrollTop = log.scrollHeight;
+
+      try {
+        const resp = await fetch('/przetworz-faktury', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ files: [f] }),
+        });
+        const json = await resp.json();
+        const r = json.results && json.results[0];
+        if (!r) throw new Error('Brak odpowiedzi');
+        if (r.status === 'ok') {
+          log.insertAdjacentHTML('beforeend', `<div class="log-ok">✓ ${f.name}</div>`);
+        } else if (r.status === 'skip') {
+          log.insertAdjacentHTML('beforeend', `<div class="log-skip">— ${f.name}: ${r.msg}</div>`);
+        } else {
+          log.insertAdjacentHTML('beforeend', `<div class="log-error">✗ ${f.name}: ${r.msg}</div>`);
+        }
+      } catch (err) {
+        log.insertAdjacentHTML('beforeend', `<div class="log-error">✗ ${f.name}: ${err}</div>`);
+      }
+
+      bar.style.width = ((i + 1) / total * 100).toFixed(0) + '%';
+      log.scrollTop = log.scrollHeight;
+    }
+
+    log.insertAdjacentHTML('beforeend', `<div style="margin-top:6px;font-weight:600;">Gotowe. <a href="/faktury-google">Zobacz wyniki →</a></div>`);
+    if (btnOcr)    btnOcr.disabled    = document.querySelectorAll('.row-cb:checked').length === 0;
+    if (btnOcrNew) btnOcrNew.disabled = document.querySelectorAll('.badge-new').length === 0;
+  }
+
+  // "Zaznaczone" button
+  const btnOcr = document.getElementById('btn-ocr');
+  if (btnOcr) {
+    btnOcr.addEventListener('click', function () {
+      const files = [...document.querySelectorAll('.row-cb:checked')]
+        .map(cb => ({ id: cb.value, name: cb.dataset.name }));
+      runOcr(files);
+    });
+  }
+
+  // "Wszystkie nowe" button
+  const btnOcrNew = document.getElementById('btn-ocr-new');
+  if (btnOcrNew) {
+    const newCount = document.querySelectorAll('.badge-new').length;
+    btnOcrNew.textContent = `Przetwórz wszystkie nowe (${newCount})`;
+    btnOcrNew.disabled    = newCount === 0;
+
+    btnOcrNew.addEventListener('click', function () {
+      const files = [...document.querySelectorAll('.badge-new')]
+        .map(badge => {
+          const row = badge.closest('tr[data-id]');
+          return row ? { id: row.dataset.id, name: row.dataset.name } : null;
+        })
+        .filter(Boolean);
+      runOcr(files);
+    });
+  }
+});
+</script>
+</body>
+</html>
