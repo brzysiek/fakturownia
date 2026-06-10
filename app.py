@@ -7,6 +7,8 @@ import os
 from datetime import date as date_type, datetime
 from zoneinfo import ZoneInfo
 
+import db
+
 _TZ_PL = ZoneInfo("Europe/Warsaw")
 
 
@@ -21,6 +23,10 @@ from flask import Flask, jsonify, redirect, render_template, request, url_for
 load_dotenv()
 
 app = Flask(__name__)
+
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+db.init_db()
+db.migrate_from_json(_APP_DIR)
 
 ENV_DOMAIN            = os.getenv("FAKTUROWNIA_DOMAIN", "")
 ENV_TOKEN             = os.getenv("FAKTUROWNIA_TOKEN", "")
@@ -92,6 +98,7 @@ def fetch_and_build(invoice_type):
                 "currency": currency,
                 "status":   STATUS_LABELS.get(inv.get("status", ""), inv.get("status", "—")),
                 "ksef":     bool(gov_id and gov_status in ("ok", "demo_ok")),
+                "api_id":   str(inv.get("id") or ""),
             })
 
     except requests.HTTPError as e:
@@ -134,15 +141,17 @@ def _load_invoices_cache(invoice_type):
 
 def load_manual_actions():
     """Return dict {tx_id: 'skip' | 'dysk'}."""
-    if not os.path.exists(MANUAL_ACTIONS_FILE):
-        return {}
-    with open(MANUAL_ACTIONS_FILE, encoding="utf-8") as f:
-        return json.load(f)
+    return db.get_manual_actions()
 
 
 def save_manual_actions(actions):
-    with open(MANUAL_ACTIONS_FILE, "w", encoding="utf-8") as f:
-        json.dump(actions, f, ensure_ascii=False, indent=2)
+    # Legacy shim — actions dict updated wholesale (used by toggle_akcja after refactor).
+    # Individual set/remove is preferred; this rebuilds from the dict for safety.
+    with db._conn() as c:
+        c.execute("DELETE FROM manual_actions")
+        for tx_id, action in actions.items():
+            c.execute("INSERT INTO manual_actions (tx_id, action) VALUES (?,?)",
+                      (tx_id, action))
 
 
 def _load_drive_cache():
@@ -178,6 +187,11 @@ def kosztowe():
         total_net   = sum(i["net"]   for i in invoices)
         total_gross = sum(i["gross"] for i in invoices)
         total_vat   = sum(i["vat"]   for i in invoices)
+        inv_link_map = db.get_invoice_link_map()
+        for inv in invoices:
+            iid              = db.make_invoice_id("ksef_cost", inv.get("number",""), inv.get("full_date",""))
+            inv["invoice_id"] = iid
+            inv["links"]      = inv_link_map.get(iid, [])
     else:
         invoices, months, total_net, total_gross, total_vat, error, updated = [], [], 0, 0, 0, None, None
     return render_template("invoices.html",
@@ -191,7 +205,47 @@ def kosztowe():
 def kosztowe_odswiez():
     result = fetch_and_build("cost")
     _save_invoices_cache("cost", *result)
+    invoices = result[0]
+    if invoices:
+        db.sync_ksef_invoices(invoices, "ksef_cost")
+        db.set_cache_updated("ksef_cost", _now_pl())
     return redirect(url_for("kosztowe"))
+
+
+def _remove_from_invoices_cache(invoice_type: str, invoice_id: str):
+    """Remove one invoice from the JSON cache and recompute aggregates."""
+    cache = _load_invoices_cache(invoice_type)
+    if not cache:
+        return
+    source   = "ksef_cost" if invoice_type == "cost" else "ksef_income"
+    invoices = [i for i in cache["invoices"]
+                if db.make_invoice_id(source, i.get("number", ""), i.get("full_date", "")) != invoice_id]
+    months      = sorted({i["month"] for i in invoices if i.get("month")}, reverse=True)
+    total_net   = sum(float(i.get("net",   0) or 0) for i in invoices)
+    total_gross = sum(float(i.get("gross", 0) or 0) for i in invoices)
+    total_vat   = sum(float(i.get("vat",   0) or 0) for i in invoices)
+    _save_invoices_cache(invoice_type, invoices, months, total_net, total_gross, total_vat,
+                         cache.get("error"))
+
+
+@app.route("/kosztowe/usun", methods=["POST"])
+def kosztowe_usun():
+    invoice_id = request.form.get("invoice_id", "")
+    sel_month  = request.form.get("month", "")
+    if invoice_id:
+        db.delete_invoice(invoice_id)
+        _remove_from_invoices_cache("cost", invoice_id)
+    return redirect(url_for("kosztowe", month=sel_month))
+
+
+@app.route("/przychodowe/usun", methods=["POST"])
+def przychodowe_usun():
+    invoice_id = request.form.get("invoice_id", "")
+    sel_month  = request.form.get("month", "")
+    if invoice_id:
+        db.delete_invoice(invoice_id)
+        _remove_from_invoices_cache("income", invoice_id)
+    return redirect(url_for("przychodowe", month=sel_month))
 
 
 @app.route("/przychodowe")
@@ -209,6 +263,11 @@ def przychodowe():
         total_net   = sum(i["net"]   for i in invoices)
         total_gross = sum(i["gross"] for i in invoices)
         total_vat   = sum(i["vat"]   for i in invoices)
+        inv_link_map = db.get_invoice_link_map()
+        for inv in invoices:
+            iid              = db.make_invoice_id("ksef_income", inv.get("number",""), inv.get("full_date",""))
+            inv["invoice_id"] = iid
+            inv["links"]      = inv_link_map.get(iid, [])
     else:
         invoices, months, total_net, total_gross, total_vat, error, updated = [], [], 0, 0, 0, None, None
     return render_template("invoices.html",
@@ -222,6 +281,10 @@ def przychodowe():
 def przychodowe_odswiez():
     result = fetch_and_build("income")
     _save_invoices_cache("income", *result)
+    invoices = result[0]
+    if invoices:
+        db.sync_ksef_invoices(invoices, "ksef_income")
+        db.set_cache_updated("ksef_income", _now_pl())
     return redirect(url_for("przychodowe"))
 
 
@@ -237,16 +300,20 @@ DEFAULT_KEYWORDS = [
 
 
 def load_keywords():
-    if not os.path.exists(KEYWORDS_FILE):
-        save_keywords(DEFAULT_KEYWORDS)
-        return list(DEFAULT_KEYWORDS)
-    with open(KEYWORDS_FILE) as f:
-        return json.load(f)
+    kws = db.get_keywords()
+    if not kws:
+        for kw in DEFAULT_KEYWORDS:
+            db.add_keyword(kw)
+        kws = list(DEFAULT_KEYWORDS)
+    return kws
 
 
 def save_keywords(keywords):
-    with open(KEYWORDS_FILE, "w") as f:
-        json.dump(keywords, f, ensure_ascii=False, indent=2)
+    # Legacy shim — replaces all keywords in DB with given list.
+    with db._conn() as c:
+        c.execute("DELETE FROM keywords")
+        for kw in keywords:
+            c.execute("INSERT INTO keywords (keyword) VALUES (?)", (kw,))
 
 
 def row_class(tx, keywords):
@@ -483,6 +550,8 @@ def transakcje():
     sel_type  = request.args.get("type",  "")
     sel_doc   = request.args.get("doc",   "")
 
+    matched_count = request.args.get("matched")
+
     if cache:
         all_txs = cache["transactions"]
         months  = cache["months"]
@@ -494,11 +563,43 @@ def transakcje():
         # Compute derived fields on all transactions before filtering
         keywords       = load_keywords()
         manual_actions = load_manual_actions()
+        tx_link_map    = db.get_tx_link_map()
         for tx in all_txs:
             tx["row_class"]     = row_class(tx, keywords)
             manual              = manual_actions.get(tx.get("tx_id", ""), "")
             tx["manual_action"] = manual
             tx["skipped"]       = (tx["row_class"] == "row-grey") or (manual == "skip")
+            links = tx_link_map.get(tx.get("tx_id", ""), [])
+            tx["links"] = links
+            # Settlement: currency-aware — use explicit link.amount when set,
+            # auto-use invoice gross only for same-currency, mark cross-currency as unknown
+            if links:
+                tx_abs      = abs(tx.get("amount", 0) or 0)
+                tx_currency = (tx.get("currency") or "PLN")
+                covered     = 0.0
+                has_unknown = False
+                for lnk in links:
+                    la           = lnk.get("amount")   # explicit PLN coverage from link
+                    inv_gross    = float(lnk.get("gross") or 0)
+                    inv_currency = (lnk.get("currency") or "PLN")
+                    if la is not None:
+                        covered += abs(float(la))
+                    elif inv_currency == tx_currency:
+                        covered += abs(inv_gross)
+                    else:
+                        has_unknown = True
+                pct = (covered / tx_abs * 100) if tx_abs > 0 else 0
+                if abs(covered - tx_abs) < 0.01 and not has_unknown:
+                    s_status = "full"
+                elif covered > tx_abs and not has_unknown:
+                    s_status = "over"
+                else:
+                    s_status = "partial"
+                tx["settlement"] = {"status": s_status, "linked": covered,
+                                    "total": tx_abs, "pct": min(pct, 100),
+                                    "has_unknown": has_unknown}
+            else:
+                tx["settlement"] = None
 
         # Server-side filtering
         txs = all_txs
@@ -524,14 +625,45 @@ def transakcje():
         sel_month=sel_month,
         sel_type=sel_type,
         sel_doc=sel_doc,
-        total_amount=total_amount)
+        total_amount=total_amount,
+        matched_count=matched_count)
 
 
 @app.route("/transakcje/odswiez", methods=["POST"])
 def transakcje_odswiez():
     transactions, months = _build_transactions()
     _save_transactions_cache(transactions, months)
+    if transactions:
+        db.sync_transactions(transactions)
+        db.set_cache_updated("transactions", _now_pl())
     return redirect(url_for("transakcje"))
+
+
+@app.route("/transakcje/dopasuj", methods=["POST"])
+def transakcje_dopasuj():
+    """Auto-match all bank transactions against all invoices in DB.
+    Clears existing auto-links first; manual links are preserved.
+    """
+    tx_cache = _load_transactions_cache()
+    if not tx_cache:
+        return redirect(url_for("transakcje"))
+
+    inv_list = db.get_invoices_for_match()
+    if not inv_list:
+        return redirect(url_for("transakcje"))
+
+    db.remove_auto_links()
+    now = _now_pl()
+    new_count = 0
+
+    for tx in tx_cache["transactions"]:
+        matched = find_matching_invoice(tx, inv_list)
+        if matched and matched.get("_invoice_id"):
+            if db.add_link(tx["tx_id"], matched["_invoice_id"],
+                           method="auto", created_at=now):
+                new_count += 1
+
+    return redirect(url_for("transakcje", matched=new_count))
 
 
 @app.route("/transakcje/akcja", methods=["POST"])
@@ -541,33 +673,101 @@ def toggle_akcja():
     action = data.get("action", "")
     if not tx_id or action not in ("skip", "dysk"):
         return jsonify({"error": "invalid params"}), 400
-    actions  = load_manual_actions()
-    previous = actions.get(tx_id, "")
+    previous = db.get_manual_actions().get(tx_id, "")
     if previous == action:
-        del actions[tx_id]
+        db.set_manual_action(tx_id, None)
         result = "removed"
     else:
-        actions[tx_id] = action
+        db.set_manual_action(tx_id, action)
         result = "added"
-    save_manual_actions(actions)
     return jsonify({"result": result, "action": action, "previous": previous, "tx_id": tx_id})
+
+
+@app.route("/api/invoices-for-tx")
+def api_invoices_for_tx():
+    """Return tx info + linked invoices + available invoices for the assignment modal."""
+    tx_id = request.args.get("tx_id", "")
+    if not tx_id:
+        return jsonify({"error": "missing tx_id"}), 400
+    tx = db.get_transaction(tx_id)
+    if not tx:
+        return jsonify({"error": "not found"}), 404
+    linked     = db.get_links_for_tx(tx_id)
+    linked_ids = {l["invoice_id"] for l in linked}
+    sources    = ["ksef_income"] if tx["typ"] == "income" else ["ksef_cost", "drive"]
+    available  = db.get_invoices_by_source(sources, exclude_ids=linked_ids)
+    return jsonify({"tx": dict(tx), "linked": linked, "available": available})
+
+
+@app.route("/api/link", methods=["POST"])
+def api_add_link():
+    data       = request.get_json(force=True) or {}
+    tx_id      = data.get("tx_id", "")
+    invoice_id = data.get("invoice_id", "")
+    amount     = data.get("amount")   # explicit PLN coverage, or None
+    if not tx_id or not invoice_id:
+        return jsonify({"error": "missing fields"}), 400
+    if amount is not None:
+        amount = float(amount)
+    added = db.add_link(tx_id, invoice_id, amount=amount, method="manual", created_at=_now_pl())
+    return jsonify({"ok": True, "added": added})
+
+
+@app.route("/api/link-amount", methods=["POST"])
+def api_update_link_amount():
+    data       = request.get_json(force=True) or {}
+    tx_id      = data.get("tx_id", "")
+    invoice_id = data.get("invoice_id", "")
+    amount     = data.get("amount")
+    if not tx_id or not invoice_id:
+        return jsonify({"error": "missing fields"}), 400
+    db.update_link_amount(tx_id, invoice_id, float(amount) if amount is not None else None)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/unlink", methods=["POST"])
+def api_remove_link():
+    data       = request.get_json(force=True) or {}
+    tx_id      = data.get("tx_id", "")
+    invoice_id = data.get("invoice_id", "")
+    if not tx_id or not invoice_id:
+        return jsonify({"error": "missing fields"}), 400
+    db.remove_link(tx_id, invoice_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/invoice-preview")
+def api_invoice_preview():
+    """Fetch full invoice details from Fakturownia API by internal api_id."""
+    api_id = request.args.get("api_id", "").strip()
+    if not api_id:
+        return jsonify({"error": "missing api_id"}), 400
+    if not ENV_DOMAIN or not ENV_TOKEN:
+        return jsonify({"error": "Brak konfiguracji FAKTUROWNIA_DOMAIN / FAKTUROWNIA_TOKEN"}), 503
+    try:
+        resp = requests.get(
+            f"https://{ENV_DOMAIN}.fakturownia.pl/invoices/{api_id}.json",
+            params={"api_token": ENV_TOKEN}, timeout=10,
+        )
+        resp.raise_for_status()
+        return jsonify(resp.json())
+    except requests.HTTPError as e:
+        return jsonify({"error": f"API {e.response.status_code}"}), 502
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
 
 
 @app.route("/ustawienia", methods=["GET", "POST"])
 def ustawienia():
-    keywords = load_keywords()
     if request.method == "POST":
         action = request.form.get("action")
-        if action == "add":
-            kw = request.form.get("keyword", "").strip()
-            if kw and kw not in keywords:
-                keywords.append(kw)
-                save_keywords(keywords)
-        elif action == "delete":
-            kw = request.form.get("keyword", "")
-            keywords = [k for k in keywords if k != kw]
-            save_keywords(keywords)
+        kw     = request.form.get("keyword", "").strip()
+        if action == "add" and kw:
+            db.add_keyword(kw)
+        elif action == "delete" and kw:
+            db.remove_keyword(kw)
         return redirect(url_for("ustawienia"))
+    keywords = load_keywords()
     return render_template("settings.html", active="ustawienia", keywords=keywords)
 
 
@@ -690,11 +890,13 @@ def faktury_na_dysku():
     files          = month_data.get("files", [])
     cache_updated  = month_data.get("updated", "")
 
-    ocr_map = {e["file_id"]: e for e in load_ocr_data()}
+    ocr_map      = {e["file_id"]: e for e in load_ocr_data()}
+    inv_link_map = db.get_invoice_link_map()
 
     rows = []
     for f in files:
         ocr = ocr_map.get(f["id"])
+        iid = db.make_invoice_id("drive", file_id=f["id"])
         rows.append({
             "id":         f["id"],
             "name":       f["name"],
@@ -707,6 +909,7 @@ def faktury_na_dysku():
             "vat_amount": ocr.get("vat_amount")         if ocr else None,
             "gross":      ocr.get("gross")              if ocr else None,
             "currency":   (ocr.get("currency")  or "PLN") if ocr else "",
+            "links":      inv_link_map.get(iid, []),
         })
 
     total_net   = sum(float(r["net"]        or 0) for r in rows if r["processed"] and r["net"]        is not None)
@@ -826,14 +1029,16 @@ def save_ocr_entry(file_id, filename, data):
     entries = load_ocr_data()
     if any(e.get("file_id") == file_id for e in entries):
         return False
-    entries.append({
+    new_entry = {
         "file_id":   file_id,
         "filename":  filename,
         "extracted": _now_pl(),
         **data,
-    })
+    }
+    entries.append(new_entry)
     with open(OCR_DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(entries, f, ensure_ascii=False, indent=2)
+    db.sync_drive_invoices([new_entry])
     return True
 
 
@@ -931,22 +1136,32 @@ def zestawienie():
             "_ksef_id":  kid,
         })
 
-    all_for_match    = ocr_for_match + ksef_for_match
-    matched_file_ids = set()
-    matched_ksef_ids = set()
-
     keywords       = load_keywords()
     manual_actions = load_manual_actions()
 
+    # ── Determine match status: prefer persisted DB links, fall back to ad-hoc ──
+    use_db_links     = db.has_any_links()
+    matched_inv_ids  = db.get_matched_invoice_ids() if use_db_links else set()
+    tx_link_map_z    = db.get_tx_link_map()          if use_db_links else {}
+
+    # Ad-hoc matching helpers (used when no DB links exist yet)
+    if not use_db_links:
+        all_for_match    = ocr_for_match + ksef_for_match
+        matched_file_ids = set()
+        matched_ksef_ids = set()
+
     bank_rows = []
     for tx in bank_txs:
-        matched = find_matching_invoice(tx, all_for_match)
-        if matched:
-            if matched["_file_id"]: matched_file_ids.add(matched["_file_id"])
-            if matched["_ksef_id"]: matched_ksef_ids.add(matched["_ksef_id"])
-            status = "matched"
+        if use_db_links:
+            status = "matched" if tx.get("tx_id", "") in tx_link_map_z else "bank_only"
         else:
-            status = "bank_only"
+            matched = find_matching_invoice(tx, all_for_match)
+            if matched:
+                if matched["_file_id"]: matched_file_ids.add(matched["_file_id"])
+                if matched["_ksef_id"]: matched_ksef_ids.add(matched["_ksef_id"])
+                status = "matched"
+            else:
+                status = "bank_only"
         tx_skipped = (
             row_class(tx, keywords) == "row-grey"
             or manual_actions.get(tx.get("tx_id", ""), "") == "skip"
@@ -969,8 +1184,12 @@ def zestawienie():
 
     drive_rows = []
     for e in drive_invs:
-        fid    = e.get("file_id", "")
-        status = "matched" if fid in matched_file_ids else "invoice_only"
+        fid = e.get("file_id", "")
+        if use_db_links:
+            iid    = db.make_invoice_id("drive", file_id=fid)
+            status = "matched" if iid in matched_inv_ids else "invoice_only"
+        else:
+            status = "matched" if fid in matched_file_ids else "invoice_only"
         drive_rows.append({
             "source":         "dysk",
             "date":           e.get("date", ""),
@@ -988,8 +1207,13 @@ def zestawienie():
 
     ksef_rows = []
     for inv in cost_invs:
-        kid    = f"cost_{inv.get('full_date','')}_{inv.get('number','')}"
-        status = "matched" if kid in matched_ksef_ids else "invoice_only"
+        if use_db_links:
+            iid    = db.make_invoice_id("ksef_cost",
+                                        inv.get("number", ""), inv.get("full_date", ""))
+            status = "matched" if iid in matched_inv_ids else "invoice_only"
+        else:
+            kid    = f"cost_{inv.get('full_date','')}_{inv.get('number','')}"
+            status = "matched" if kid in matched_ksef_ids else "invoice_only"
         ksef_rows.append({
             "source":         "ksef",
             "ksef_type":      "cost",
@@ -1006,8 +1230,13 @@ def zestawienie():
             "payment_status": inv.get("status") or "",
         })
     for inv in inc_invs:
-        kid    = f"income_{inv.get('full_date','')}_{inv.get('number','')}"
-        status = "matched" if kid in matched_ksef_ids else "invoice_only"
+        if use_db_links:
+            iid    = db.make_invoice_id("ksef_income",
+                                        inv.get("number", ""), inv.get("full_date", ""))
+            status = "matched" if iid in matched_inv_ids else "invoice_only"
+        else:
+            kid    = f"income_{inv.get('full_date','')}_{inv.get('number','')}"
+            status = "matched" if kid in matched_ksef_ids else "invoice_only"
         ksef_rows.append({
             "source":         "ksef",
             "ksef_type":      "income",
@@ -1060,4 +1289,4 @@ def zestawienie():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=8080)

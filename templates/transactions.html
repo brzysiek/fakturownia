@@ -65,6 +65,7 @@
     .badge-income  { background: #dcfce7; color: #15803d; }
     .badge-cost    { background: #fee2e2; color: #b91c1c; }
     .badge-skip    { background: #f3f4f6; color: #6b7280; }
+    .badge-link    { background: #f5f3ff; color: #6d28d9; }
     .btn-action {
       background: none; border: 1px solid #d1d5db; cursor: pointer;
       color: #6b7280; font-size: 0.75rem; padding: 2px 9px; border-radius: 4px;
@@ -80,6 +81,84 @@
     table.dataTable tbody tr.row-green:hover td  { background: #dcfce7 !important; }
     table.dataTable tbody tr.row-grey td   { background: #f3f4f6 !important; }
     table.dataTable tbody tr.row-grey:hover td   { background: #e5e7eb !important; }
+
+    /* Settlement indicator */
+    .settle-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+    .settle-bar { width: 56px; height: 5px; background: #e5e7eb; border-radius: 3px; flex-shrink: 0; overflow: hidden; }
+    .settle-fill { height: 100%; border-radius: 3px; }
+    .settle-fill.settle-full    { background: #16a34a; }
+    .settle-fill.settle-partial { background: #f59e0b; }
+    .settle-fill.settle-over    { background: #ef4444; }
+    .settle-lbl { font-size: 0.72rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .settle-lbl.settle-full    { color: #15803d; }
+    .settle-lbl.settle-partial { color: #b45309; }
+    .settle-lbl.settle-over    { color: #b91c1c; }
+
+    /* Assign button */
+    .btn-assign {
+      background: none; border: 1px solid #d1d5db; cursor: pointer;
+      color: #6b7280; font-size: 0.75rem; padding: 2px 9px; border-radius: 4px;
+      line-height: 1.4; white-space: nowrap;
+    }
+    .btn-assign:hover { color: #374151; border-color: #9ca3af; }
+    .btn-assign.has-links { color: #6d28d9; border-color: #a78bfa; background: #f5f3ff; font-weight: 600; }
+
+    /* Invoice assignment modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+      z-index: 1000; align-items: flex-start; justify-content: center; padding-top: 5vh;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: #fff; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.22);
+      width: 660px; max-width: 96vw; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px; border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
+    }
+    .modal-header h3 { font-size: 1rem; font-weight: 600; }
+    .modal-close { background: none; border: none; cursor: pointer; color: #9ca3af; font-size: 1.1rem; padding: 4px 8px; border-radius: 4px; }
+    .modal-close:hover { background: #f3f4f6; color: #374151; }
+    .modal-tx-info {
+      padding: 10px 20px; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
+      font-size: 0.87rem; color: #374151; flex-shrink: 0;
+    }
+    .modal-body { padding: 16px 20px; overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 16px; }
+    .modal-section { display: flex; flex-direction: column; gap: 6px; }
+    .modal-section-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; font-weight: 600; }
+    .modal-settle-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+    .modal-settle-bar-bg { background: #e5e7eb; border-radius: 4px; height: 8px; overflow: hidden; }
+    .modal-settle-bar-fill { height: 8px; border-radius: 4px; transition: width 0.3s, background 0.3s; width: 0%; }
+    .modal-settle-text { font-size: 0.83rem; color: #555; font-variant-numeric: tabular-nums; }
+    .modal-inv-list { display: flex; flex-direction: column; gap: 5px; }
+    .modal-inv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; }
+    .modal-inv-row:hover { background: #f9fafb; }
+    .modal-inv-info { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 0.84rem; flex: 1; min-width: 0; }
+    .modal-source { font-size: 0.71rem; padding: 1px 6px; border-radius: 8px; font-weight: 500; white-space: nowrap; }
+    .src-ksef-cost   { background: #ede9fe; color: #6d28d9; }
+    .src-ksef-income { background: #f5f3ff; color: #7c3aed; }
+    .src-drive       { background: #e0f2fe; color: #0369a1; }
+    .badge-auto { font-size: 0.68rem; padding: 1px 5px; border-radius: 6px; background: #fef9c3; color: #854d0e; }
+    .modal-search { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; }
+    .modal-empty { color: #9ca3af; font-size: 0.84rem; text-align: center; padding: 10px 0; }
+    .modal-loading { text-align: center; color: #9ca3af; padding: 32px; }
+    .btn-link-add { flex-shrink: 0; background: none; border: 1px solid #a7f3d0; cursor: pointer; color: #059669; font-size: 0.75rem; padding: 3px 10px; border-radius: 5px; white-space: nowrap; }
+    .btn-link-add:hover { background: #d1fae5; }
+    .btn-link-rem { flex-shrink: 0; background: none; border: 1px solid #fca5a5; cursor: pointer; color: #dc2626; font-size: 0.75rem; padding: 3px 10px; border-radius: 5px; white-space: nowrap; }
+    .btn-link-rem:hover { background: #fee2e2; }
+    .btn-full100 { flex-shrink: 0; background: none; border: 1px solid #c4b5fd; cursor: pointer; color: #7c3aed; font-size: 0.72rem; padding: 3px 8px; border-radius: 5px; white-space: nowrap; font-weight: 600; }
+    .btn-full100:hover { background: #f5f3ff; }
+    .btn-save-amount { background: none; border: 1px solid #d1d5db; cursor: pointer; color: #374151; font-size: 0.75rem; padding: 3px 8px; border-radius: 5px; white-space: nowrap; }
+    .btn-save-amount:hover { background: #f9fafb; }
+    .modal-inv-linked { flex-direction: column; align-items: stretch; gap: 6px; }
+    .modal-inv-main { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .modal-inv-btns { display: flex; gap: 6px; flex-shrink: 0; }
+    .modal-amount-input { width: 110px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 0.82rem; }
+    .cross-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; flex-wrap: wrap; }
+    .cross-covered { font-size: 0.78rem; color: #15803d; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .cross-unknown { font-size: 0.78rem; color: #d97706; white-space: nowrap; }
+    .cross-tag { font-size: 0.68rem; padding: 1px 6px; border-radius: 8px; background: #fef9c3; color: #854d0e; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -98,10 +177,21 @@
     <form method="post" action="/transakcje/odswiez">
       <button class="btn-refresh" type="submit">Odśwież transakcje</button>
     </form>
+    <form method="post" action="/transakcje/dopasuj">
+      <button class="btn-refresh" style="background:#7c3aed;" type="submit"
+              title="Dopasuje transakcje do faktur i zapisze powiązania">
+        Dopasuj automatycznie faktury i płatności
+      </button>
+    </form>
     {% if cache_updated %}
     <span class="cache-info">Ostatnia aktualizacja: {{ cache_updated[:16] | replace('T', ' ') }}</span>
     {% else %}
     <span class="cache-info">Brak danych — kliknij Odśwież aby wczytać transakcje.</span>
+    {% endif %}
+    {% if matched_count is not none %}
+    <span class="cache-info" style="color:#6d28d9;font-weight:600;">
+      ✓ Dopasowano: {{ matched_count }} powiązań
+    </span>
     {% endif %}
   </div>
 
@@ -170,6 +260,22 @@
           {% if tx.document == 'dysk' %}<span class="badge badge-dysk">dysk</span>
           {% elif tx.manual_action == 'dysk' %}<span class="badge badge-dysk manual-badge">dysk</span>{% endif %}
           {% if tx.skipped %}<span class="badge badge-skip">Pominięte</span>{% endif %}
+          {% if tx.links %}
+            {% for lnk in tx.links %}
+              <span class="badge badge-link" title="{{ lnk.source }}: {{ lnk.who }}">
+                {{ lnk.number or '—' }}
+              </span>
+            {% endfor %}
+          {% endif %}
+          {% if tx.settlement %}
+          <div class="settle-row">
+            <div class="settle-bar"><div class="settle-fill settle-{{ tx.settlement.status }}" style="width:{{ tx.settlement.pct|int }}%"></div></div>
+            <span class="settle-lbl settle-{{ tx.settlement.status }}">
+              {{ tx.settlement.pct|int }}% · {{ "%.2f"|format(tx.settlement.linked) }} PLN
+              {% if tx.settlement.has_unknown %}<span style="color:#9ca3af;font-size:0.68rem;"> +waluta obca</span>{% endif %}
+            </span>
+          </div>
+          {% endif %}
         </td>
         <td class="action-cell" style="white-space:nowrap;">
           <button class="btn-action {{ 'active' if tx.skipped else '' }}"
@@ -179,6 +285,9 @@
           <button class="btn-action {{ 'active' if (tx.document == 'dysk' or tx.manual_action == 'dysk') else '' }}"
                   data-action="dysk" data-tx-id="{{ tx.tx_id }}"
                   title="{{ 'Cofnij dysk' if tx.manual_action == 'dysk' else 'Oznacz dysk' }}">Dysk</button>
+          <button class="btn-assign {{ 'has-links' if tx.links else '' }}"
+                  data-tx-id="{{ tx.tx_id }}"
+                  title="Przypisz faktury do transakcji">Faktury</button>
         </td>
       </tr>
       {% endfor %}
@@ -201,6 +310,40 @@
   <p class="empty">Brak plików CSV w folderze <code>importy_alior/</code>.</p>
   {% endif %}
 
+</div>
+
+<!-- Invoice assignment modal -->
+<div class="modal-overlay" id="link-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Faktury powiązane z transakcją</h3>
+      <button class="modal-close" id="modal-close-btn">✕</button>
+    </div>
+    <div class="modal-tx-info" id="modal-tx-info"></div>
+    <div class="modal-body">
+      <div id="modal-loading" class="modal-loading">Ładowanie…</div>
+      <div id="modal-content" style="display:none;">
+        <div class="modal-section">
+          <div class="modal-section-title">Rozliczenie transakcji</div>
+          <div class="modal-settle-box">
+            <div class="modal-settle-bar-bg">
+              <div class="modal-settle-bar-fill" id="modal-settle-fill"></div>
+            </div>
+            <div class="modal-settle-text" id="modal-settle-text">Brak powiązanych faktur</div>
+          </div>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">Powiązane faktury</div>
+          <div class="modal-inv-list" id="modal-linked"></div>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">Dodaj fakturę</div>
+          <input type="text" class="modal-search" id="modal-search" placeholder="Szukaj po numerze lub kontrahencie…">
+          <div class="modal-inv-list" id="modal-available" style="margin-top:8px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -228,10 +371,10 @@ $(function () {
     ],
   });
 
-  // Action toggle (AJAX)
+  // ── Action toggle (Pomiń / Dysk) ─────────────────────────────────────────
   document.addEventListener('click', function (e) {
     const btn = e.target.closest('.btn-action');
-    if (!btn) return;
+    if (!btn || !btn.dataset.action) return;
     const txId   = btn.dataset.txId;
     const action = btn.dataset.action;
 
@@ -247,7 +390,6 @@ $(function () {
       const row      = btn.closest('tr');
       const docCell  = row.querySelector('td.doc-cell');
 
-      // If replacing the other action, undo its badge + button
       if (added && previous) {
         if (previous === 'skip') {
           docCell.querySelector('.badge-skip')?.remove();
@@ -287,6 +429,297 @@ $(function () {
         btn.title = added ? 'Cofnij dysk' : 'Oznacz dysk';
       }
     });
+  });
+
+  // ── Invoice assignment modal ──────────────────────────────────────────────
+  let _txId      = null;
+  let _txData    = null;
+  let _available = [];
+
+  function srcLabel(s) {
+    if (s === 'ksef_cost')   return ['KSeF koszt.',  'src-ksef-cost'];
+    if (s === 'ksef_income') return ['KSeF przych.', 'src-ksef-income'];
+    if (s === 'drive')       return ['Dysk',         'src-drive'];
+    return [s, ''];
+  }
+
+  function openModal(txId) {
+    _txId = txId;
+    document.getElementById('link-modal').classList.add('open');
+    fetchModal(txId);
+  }
+
+  function closeModal() {
+    document.getElementById('link-modal').classList.remove('open');
+  }
+
+  async function fetchModal(txId) {
+    document.getElementById('modal-loading').style.display = 'block';
+    document.getElementById('modal-content').style.display = 'none';
+    try {
+      const resp = await fetch('/api/invoices-for-tx?tx_id=' + encodeURIComponent(txId));
+      _txData    = await resp.json();
+      _available = _txData.available || [];
+      renderModal(_txData);
+      document.getElementById('modal-loading').style.display = 'none';
+      document.getElementById('modal-content').style.display = 'flex';
+      document.getElementById('modal-content').style.flexDirection = 'column';
+      document.getElementById('modal-content').style.gap = '16px';
+    } catch(err) {
+      document.getElementById('modal-loading').textContent = 'Błąd: ' + err;
+    }
+  }
+
+  function renderModal(data) {
+    const tx   = data.tx;
+    const sign = tx.amount >= 0 ? '+' : '';
+    const typ  = tx.typ === 'income' ? 'Przychód' : 'Koszt';
+    document.getElementById('modal-tx-info').innerHTML =
+      `<strong>${tx.date || tx.full_date}</strong> &nbsp;·&nbsp; ${escHtml(tx.kontrahent)}
+       &nbsp;·&nbsp; <strong>${sign}${(+tx.amount).toFixed(2)} ${tx.currency || 'PLN'}</strong>
+       &nbsp;·&nbsp; ${typ}`;
+    renderLinked(data.linked, tx);
+    renderAvailable(_available);
+    renderSettle(data.linked, tx);
+  }
+
+  // Currency-aware settlement calculation (mirrors Python logic)
+  function calcSettle(linked, tx) {
+    const txAbs = Math.abs(tx.amount || 0);
+    const txCur = tx.currency || 'PLN';
+    let covered = 0, hasUnknown = false;
+    linked.forEach(inv => {
+      const la = inv.link_amount != null ? Math.abs(+inv.link_amount) : null;
+      if (la !== null) {
+        covered += la;
+      } else if ((inv.currency || 'PLN') === txCur) {
+        covered += Math.abs(+(inv.gross || 0));
+      } else {
+        hasUnknown = true;
+      }
+    });
+    const pct = txAbs > 0 ? Math.min(covered / txAbs * 100, 100) : 0;
+    let status;
+    if (!linked.length)                                             status = 'none';
+    else if (Math.abs(covered - txAbs) < 0.01 && !hasUnknown)     status = 'full';
+    else if (covered > txAbs && !hasUnknown)                       status = 'over';
+    else                                                           status = 'partial';
+    return { txAbs, covered, pct, status, hasUnknown, txCur };
+  }
+
+  function renderLinked(linked, tx) {
+    const el    = document.getElementById('modal-linked');
+    const txCur = tx.currency || 'PLN';
+    if (!linked.length) {
+      el.innerHTML = '<div class="modal-empty">Brak powiązanych faktur.</div>';
+      return;
+    }
+    el.innerHTML = linked.map(inv => {
+      const [lbl, cls] = srcLabel(inv.source);
+      const auto    = inv.method === 'auto' ? '<span class="badge-auto">auto</span>' : '';
+      const isCross = (inv.currency || 'PLN') !== txCur;
+      const la      = inv.link_amount != null ? +inv.link_amount : null;
+
+      // Cross-currency: show amount row with input field
+      let crossHtml = '';
+      if (isCross) {
+        const val  = la != null ? la.toFixed(2) : '';
+        const note = la != null
+          ? `<span class="cross-covered">${la.toFixed(2)} PLN</span>`
+          : `<span class="cross-unknown">brak kwoty PLN</span>`;
+        crossHtml = `<div class="cross-row">
+          ${note}
+          <input type="number" class="modal-amount-input"
+                 data-inv="${escAttr(inv.invoice_id)}"
+                 value="${escAttr(val)}" min="0" step="0.01" placeholder="Kwota PLN…">
+          <button class="btn-save-amount" data-inv="${escAttr(inv.invoice_id)}">Zapisz</button>
+        </div>`;
+      }
+
+      return `<div class="modal-inv-row modal-inv-linked">
+        <div class="modal-inv-main">
+          <div class="modal-inv-info">
+            <strong>${escHtml(inv.number || '—')}</strong>
+            <span>${escHtml(inv.who || '')}</span>
+            <span>${(+(inv.gross||0)).toFixed(2)}&nbsp;${escHtml(inv.currency || 'PLN')}</span>
+            <span class="modal-source ${cls}">${lbl}</span>${auto}
+          </div>
+          ${crossHtml}
+        </div>
+        <div class="modal-inv-btns">
+          <button class="btn-full100" data-inv="${escAttr(inv.invoice_id)}"
+                  title="Ustaw tę fakturę jako 100% pokrycie całej transakcji">100%</button>
+          <button class="btn-link-rem" data-inv="${escAttr(inv.invoice_id)}">Usuń</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderAvailable(invoices) {
+    const q     = (document.getElementById('modal-search').value || '').toLowerCase();
+    const txCur = _txData?.tx?.currency || 'PLN';
+    const fl    = q ? invoices.filter(i =>
+      (i.number || '').toLowerCase().includes(q) ||
+      (i.who    || '').toLowerCase().includes(q)
+    ) : invoices;
+    const el = document.getElementById('modal-available');
+    if (!fl.length) {
+      el.innerHTML = '<div class="modal-empty">Brak faktur do dodania.</div>';
+      return;
+    }
+    el.innerHTML = fl.slice(0, 100).map(inv => {
+      const [lbl, cls] = srcLabel(inv.source);
+      const isCross    = (inv.currency || 'PLN') !== txCur;
+      const crossNote  = isCross
+        ? `<span class="cross-tag" title="Waluta faktury różni się od waluty transakcji — po dodaniu uzupełnij kwotę PLN">waluta obca</span>`
+        : '';
+      return `<div class="modal-inv-row">
+        <div class="modal-inv-info">
+          <strong>${escHtml(inv.number || '—')}</strong>
+          <span>${escHtml(inv.who || '')}</span>
+          <span>${(+(inv.gross||0)).toFixed(2)}&nbsp;${escHtml(inv.currency || 'PLN')}</span>
+          <span class="modal-source ${cls}">${lbl}</span>${crossNote}
+        </div>
+        <button class="btn-link-add"
+                data-inv="${escAttr(inv.invoice_id)}"
+                data-gross="${+(inv.gross||0)}"
+                data-cur="${escAttr(inv.currency || 'PLN')}">Dodaj</button>
+      </div>`;
+    }).join('');
+  }
+
+  function renderSettle(linked, tx) {
+    const { txAbs, covered, pct, status, hasUnknown, txCur } = calcSettle(linked, tx);
+    const fill = document.getElementById('modal-settle-fill');
+    const text = document.getElementById('modal-settle-text');
+    const colorMap   = { full: '#16a34a', partial: '#f59e0b', over: '#ef4444', none: '#e5e7eb' };
+    const statusLabel = { full: 'Całkowite', partial: 'Częściowe', over: 'Nadwyżka', none: '' };
+    fill.style.width      = pct.toFixed(0) + '%';
+    fill.style.background = colorMap[status] || '#e5e7eb';
+    text.textContent = linked.length
+      ? `${covered.toFixed(2)} / ${txAbs.toFixed(2)} ${txCur} · ${statusLabel[status]}` +
+        (hasUnknown ? ' + waluta obca (uzupełnij kwotę PLN)' : '')
+      : 'Brak powiązanych faktur';
+    updateTableRow(_txId, linked, tx);
+  }
+
+  function updateTableRow(txId, linked, tx) {
+    let assignBtn = null;
+    document.querySelectorAll('.btn-assign').forEach(b => {
+      if (b.dataset.txId === txId) assignBtn = b;
+    });
+    if (!assignBtn) return;
+    const row     = assignBtn.closest('tr');
+    const docCell = row.querySelector('td.doc-cell');
+    assignBtn.classList.toggle('has-links', linked.length > 0);
+
+    // Replace link badges
+    docCell.querySelectorAll('.badge-link').forEach(el => el.remove());
+    const settleEl = docCell.querySelector('.settle-row');
+    linked.forEach(inv => {
+      const sp = document.createElement('span');
+      sp.className   = 'badge badge-link';
+      sp.title       = srcLabel(inv.source)[0] + ': ' + (inv.who || '');
+      sp.textContent = inv.number || '—';
+      docCell.insertBefore(document.createTextNode(' '), settleEl || null);
+      docCell.insertBefore(sp, settleEl || null);
+    });
+
+    // Replace settlement row
+    docCell.querySelectorAll('.settle-row').forEach(el => el.remove());
+    if (!linked.length) return;
+    const { txAbs, covered, pct, status, hasUnknown } = calcSettle(linked, tx);
+    const div = document.createElement('div');
+    div.className = 'settle-row';
+    const unknownNote = hasUnknown
+      ? ' <span style="font-size:0.68rem;color:#9ca3af;">+waluta obca</span>' : '';
+    div.innerHTML = `<div class="settle-bar"><div class="settle-fill settle-${status}" style="width:${pct.toFixed(0)}%"></div></div>
+                     <span class="settle-lbl settle-${status}">${Math.round(pct)}% · ${covered.toFixed(2)} PLN</span>${unknownNote}`;
+    docCell.appendChild(div);
+  }
+
+  async function doLink(invoiceId, amount) {
+    const body = { tx_id: _txId, invoice_id: invoiceId };
+    if (amount != null) body.amount = amount;
+    await fetch('/api/link', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    await fetchModal(_txId);
+  }
+
+  async function doUnlink(invoiceId) {
+    await fetch('/api/unlink', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tx_id: _txId, invoice_id: invoiceId}),
+    });
+    await fetchModal(_txId);
+  }
+
+  async function doSetFull100(invoiceId) {
+    const txAbs = Math.abs(_txData?.tx?.amount || 0);
+    await fetch('/api/link-amount', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tx_id: _txId, invoice_id: invoiceId, amount: txAbs}),
+    });
+    await fetchModal(_txId);
+  }
+
+  async function doSaveLinkAmount(invoiceId, valStr) {
+    const amount = parseFloat(valStr);
+    if (isNaN(amount) || amount < 0) return;
+    await fetch('/api/link-amount', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tx_id: _txId, invoice_id: invoiceId, amount}),
+    });
+    await fetchModal(_txId);
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function escAttr(s) { return escHtml(s); }
+
+  // Open modal
+  document.addEventListener('click', function(e) {
+    const b = e.target.closest('.btn-assign');
+    if (b) openModal(b.dataset.txId);
+  });
+
+  // Close modal
+  document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+  document.getElementById('link-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeModal();
+  });
+
+  // Modal action buttons
+  document.addEventListener('click', function(e) {
+    const add = e.target.closest('.btn-link-add');
+    if (add) {
+      const txCur  = _txData?.tx?.currency || 'PLN';
+      const invCur = add.dataset.cur || 'PLN';
+      // Same currency → pass invoice gross as amount; cross-currency → null (user fills later)
+      const amount = invCur === txCur ? parseFloat(add.dataset.gross || '0') : null;
+      doLink(add.dataset.inv, amount);
+      return;
+    }
+    const rem = e.target.closest('.btn-link-rem');
+    if (rem) { doUnlink(rem.dataset.inv); return; }
+    const full = e.target.closest('.btn-full100');
+    if (full) { doSetFull100(full.dataset.inv); return; }
+    const save = e.target.closest('.btn-save-amount');
+    if (save) {
+      const input = save.closest('.cross-row')?.querySelector('.modal-amount-input');
+      if (input) doSaveLinkAmount(save.dataset.inv, input.value);
+    }
+  });
+
+  // Search filter
+  document.getElementById('modal-search').addEventListener('input', function() {
+    renderAvailable(_available);
   });
 });
 </script>

@@ -1,6 +1,20 @@
 {
-  "updated": "2026-06-10T07:22:12+02:00",
+  "updated": "2026-06-10T21:25:05+02:00",
   "invoices": [
+    {
+      "number": "F00181/2026/KOB2",
+      "seller": "ŁUKASZ BRZYSKI TRUSTART",
+      "buyer": "Bonito.pl Sp. z o.o.",
+      "date": "10/06",
+      "full_date": "2026-06-10",
+      "month": "2026-06",
+      "net": 25.21,
+      "gross": 26.47,
+      "vat": 1.26,
+      "currency": "PLN",
+      "status": "Opłacona",
+      "ksef": true
+    },
     {
       "number": "F 4510K1/7314/26",
       "seller": "Łukasz Brzyski Trustart",
@@ -112,20 +126,6 @@
       "currency": "PLN",
       "status": "Opłacona",
       "ksef": true
-    },
-    {
-      "number": null,
-      "seller": "Łukasz Brzyski Trustart",
-      "buyer": "-",
-      "date": "21/05",
-      "full_date": "2026-05-21",
-      "month": "2026-05",
-      "net": 0.0,
-      "gross": 0.0,
-      "vat": 0.0,
-      "currency": "PLN",
-      "status": "not_approved",
-      "ksef": false
     },
     {
       "number": "FS 47/05/2026",
@@ -823,8 +823,8 @@
     "2025-12",
     "2025-06"
   ],
-  "total_net": 14179.95,
-  "total_gross": 16946.63,
-  "total_vat": 2766.68,
+  "total_net": 14205.16,
+  "total_gross": 16973.1,
+  "total_vat": 2767.94,
   "error": null
 }

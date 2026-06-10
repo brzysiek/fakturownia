@@ -92,6 +92,9 @@
     .badge-new  { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; background: #fee2e2; color: #b91c1c; vertical-align: middle; }
     .btn-del { background: none; border: none; cursor: pointer; color: #9ca3af; font-size: 1rem; padding: 0 4px; line-height: 1; }
     .btn-del:hover { color: #ef4444; }
+    .badge-tx { background: #f5f3ff; color: #6d28d9; font-size: 0.72rem; display: inline-block;
+                padding: 2px 7px; border-radius: 10px; margin: 1px 2px 1px 0; white-space: nowrap; }
+    .no-tx    { color: #d1d5db; font-size: 0.8rem; }
 
     table.dataTable tbody tr.row-new td { background: #fafafa !important; }
   </style>
@@ -181,6 +184,7 @@
         <th class="num">VAT</th>
         <th class="num">Brutto</th>
         <th>Waluta</th>
+        <th>Transakcje bankowe</th>
         <th></th>
       </tr>
     </thead>
@@ -217,6 +221,17 @@
         </td>
         <td>{% if row.processed %}{{ row.currency or '' }}{% endif %}</td>
         <td>
+          {% if row.links %}
+            {% for lnk in row.links %}
+              <span class="badge-tx" title="{{ lnk.kontrahent }}">
+                {{ lnk.full_date[:10] }} · {{ "%+.2f"|format(lnk.tx_amount) }}
+              </span>
+            {% endfor %}
+          {% else %}
+            <span class="no-tx">—</span>
+          {% endif %}
+        </td>
+        <td>
           {% if row.processed %}
           <form method="post" action="/faktury-na-dysku/usun" style="display:inline">
             <input type="hidden" name="file_id" value="{{ row.id }}">
@@ -233,7 +248,7 @@
         <td class="num">{{ "%.2f"|format(total_net) }}</td>
         <td class="num">{{ "%.2f"|format(total_vat) }}</td>
         <td class="num">{{ "%.2f"|format(total_gross) }}</td>
-        <td colspan="2"></td>
+        <td colspan="3"></td>
       </tr>
     </tfoot>
   </table>
@@ -260,6 +275,7 @@ $(function () {
         { targets: [0], orderable: false, searchable: false },
         { targets: [6, 7, 8], className: 'num' },
         { targets: [10], orderable: false, searchable: false },
+        { targets: [11], orderable: false, searchable: false },
       ],
       language: {
         search:       'Szukaj:',

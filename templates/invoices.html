@@ -76,6 +76,46 @@
     .badge-overdue { background: #fee2e2; color: #b91c1c; }
     .badge-partial { background: #fef3c7; color: #b45309; }
     .badge-other   { background: #f3f4f6; color: #555; }
+    .badge-tx      { background: #f5f3ff; color: #6d28d9; font-size: 0.72rem; display: inline-block;
+                     padding: 2px 7px; border-radius: 10px; margin: 1px 2px 1px 0; white-space: nowrap; }
+    .no-tx         { color: #d1d5db; font-size: 0.8rem; }
+    .btn-del { background: none; border: none; cursor: pointer; color: #9ca3af; font-size: 1rem; padding: 0 4px; line-height: 1; }
+    .btn-del:hover { color: #ef4444; }
+
+    /* Invoice preview modal */
+    #prev-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      z-index: 1000; align-items: flex-start; justify-content: center;
+      padding: 40px 16px; overflow-y: auto;
+    }
+    #prev-overlay.open { display: flex; }
+    #prev-box {
+      background: #fff; border-radius: 10px; width: 100%; max-width: 760px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.18); padding: 28px 32px; position: relative;
+    }
+    #prev-close {
+      position: absolute; top: 14px; right: 18px;
+      background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #9ca3af;
+    }
+    #prev-close:hover { color: #111; }
+    #prev-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 18px; }
+    .prev-section { margin-bottom: 16px; }
+    .prev-section h4 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .06em;
+      color: #888; margin-bottom: 6px; }
+    .prev-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
+    .prev-kv { font-size: 0.85rem; }
+    .prev-kv span { color: #666; font-size: 0.78rem; }
+    .prev-positions { width: 100%; border-collapse: collapse; font-size: 0.83rem; margin-top: 4px; }
+    .prev-positions th { font-size: 0.72rem; color: #555; text-transform: uppercase;
+      letter-spacing: .04em; border-bottom: 2px solid #e5e7eb; padding: 6px 8px;
+      background: #f9fafb; text-align: left; }
+    .prev-positions td { padding: 6px 8px; border-bottom: 1px solid #f3f4f6; }
+    .prev-positions td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .prev-positions tfoot td { font-weight: 600; background: #f9fafb;
+      border-top: 2px solid #e5e7eb; padding: 7px 8px; }
+    #prev-loader { text-align: center; color: #6b7280; padding: 48px 0; font-size: 0.9rem; }
+    #prev-error  { background: #fee2e2; border: 1px solid #fca5a5; color: #b91c1c;
+      padding: 10px 14px; border-radius: 6px; font-size: 0.87rem; }
   </style>
 </head>
 <body>
@@ -128,11 +168,14 @@
         <th class="num">Netto</th>
         <th class="num">VAT</th>
         <th class="num">Brutto</th>
+        <th>Transakcje bankowe</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
       {% for inv in invoices %}
-      <tr data-net="{{ inv.net }}" data-vat="{{ inv.vat }}" data-gross="{{ inv.gross }}">
+      <tr data-net="{{ inv.net }}" data-vat="{{ inv.vat }}" data-gross="{{ inv.gross }}"
+          data-api-id="{{ inv.api_id or '' }}" class="inv-row" style="cursor:pointer">
         <td data-order="{{ inv.full_date }}">{{ inv.date }}</td>
         <td><strong>{{ inv.number }}</strong></td>
         <td>{{ inv.buyer }}</td>
@@ -152,6 +195,24 @@
         <td class="num">{{ "%.2f"|format(inv.net) }}{% if inv.currency != 'PLN' %} {{ inv.currency }}{% endif %}</td>
         <td class="num">{{ "%.2f"|format(inv.vat) }}{% if inv.currency != 'PLN' %} {{ inv.currency }}{% endif %}</td>
         <td class="num">{{ "%.2f"|format(inv.gross) }}{% if inv.currency != 'PLN' %} {{ inv.currency }}{% endif %}</td>
+        <td>
+          {% if inv.links %}
+            {% for lnk in inv.links %}
+              <span class="badge-tx" title="{{ lnk.kontrahent }}">
+                {{ lnk.full_date[:10] }} · {{ "%+.2f"|format(lnk.tx_amount) }}
+              </span>
+            {% endfor %}
+          {% else %}
+            <span class="no-tx">—</span>
+          {% endif %}
+        </td>
+        <td>
+          <form method="post" action="/{{ 'kosztowe' if invoice_type == 'cost' else 'przychodowe' }}/usun" style="display:inline">
+            <input type="hidden" name="invoice_id" value="{{ inv.invoice_id }}">
+            <input type="hidden" name="month" value="{{ sel_month }}">
+            <button class="btn-del" type="submit" title="Usuń fakturę z listy">✕</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -161,6 +222,7 @@
         <td class="num" id="sum-net">{{ "%.2f"|format(total_net) }}</td>
         <td class="num" id="sum-vat">{{ "%.2f"|format(total_vat) }}</td>
         <td class="num" id="sum-gross">{{ "%.2f"|format(total_gross) }}</td>
+        <td colspan="2"></td>
       </tr>
     </tfoot>
   </table>
@@ -170,6 +232,17 @@
   <p class="empty">Brak faktur.</p>
   {% endif %}
 
+</div>
+
+<!-- Invoice preview modal -->
+<div id="prev-overlay">
+  <div id="prev-box">
+    <button id="prev-close" title="Zamknij">&#x2715;</button>
+    <div id="prev-title">Podgląd faktury</div>
+    <div id="prev-body">
+      <div id="prev-loader">Ładowanie…</div>
+    </div>
+  </div>
 </div>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -192,9 +265,156 @@ $(function () {
     },
     columnDefs: [
       { targets: [4, 5, 6], className: 'num' },
+      { targets: [7], orderable: false, searchable: false },
+      { targets: [8], orderable: false, searchable: false },
     ],
   });
 });
+</script>
+<script>
+(function () {
+  const overlay = document.getElementById('prev-overlay');
+  const body    = document.getElementById('prev-body');
+  const loader  = document.getElementById('prev-loader');
+
+  function fmt(v) {
+    if (v == null) return '—';
+    const n = parseFloat(v);
+    return isNaN(n) ? (v || '—') : n.toFixed(2);
+  }
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  const PAYMENT_LABELS = {
+    'transfer': 'Przelew', 'cash': 'Gotówka', 'card': 'Karta',
+    'cod': 'Pobranie', 'off': 'Brak', 'cheque': 'Czek', 'bank': 'Przelew',
+  };
+  const STATUS_LABELS = {
+    'paid':'Opłacona','unpaid':'Nieopłacona','partial':'Częściowo opłacona',
+    'overdue':'Przeterminowana','sent':'Wysłana','issued':'Wystawiona',
+    'rejected':'Odrzucona','canceled':'Anulowana','draft':'Szkic',
+  };
+
+  function renderPreview(d) {
+    const currency = d.currency || 'PLN';
+    const status   = STATUS_LABELS[d.status] || d.status || '—';
+    const payType  = PAYMENT_LABELS[d.payment_type] || d.payment_type || '—';
+    const sellDate = d.sell_date || d.issue_date || '—';
+    const payDate  = d.payment_date || '—';
+
+    // Positions table
+    const positions = d.positions || [];
+    let posRows = '';
+    for (const p of positions) {
+      posRows += `<tr>
+        <td>${esc(p.name)}</td>
+        <td class="num">${esc(p.quantity)} ${esc(p.unit||'')}</td>
+        <td class="num">${esc(p.vat_rate||'')}</td>
+        <td class="num">${fmt(p.price_net)} ${currency}</td>
+        <td class="num">${fmt(p.price_vat)} ${currency}</td>
+        <td class="num">${fmt(p.price_gross)} ${currency}</td>
+      </tr>`;
+    }
+
+    document.getElementById('prev-title').textContent = d.number || '—';
+
+    return `
+      <div class="prev-section">
+        <div class="prev-grid">
+          <div class="prev-kv"><span>Data wystawienia</span><br>${esc(d.issue_date||'—')}</div>
+          <div class="prev-kv"><span>Data sprzedaży</span><br>${esc(sellDate)}</div>
+          <div class="prev-kv"><span>Termin płatności</span><br>${esc(payDate)}</div>
+          <div class="prev-kv"><span>Forma płatności</span><br>${esc(payType)}</div>
+          <div class="prev-kv"><span>Status</span><br>${esc(status)}</div>
+          <div class="prev-kv"><span>Waluta</span><br>${esc(currency)}</div>
+        </div>
+      </div>
+
+      <div class="prev-section">
+        <h4>Sprzedawca</h4>
+        <div class="prev-grid">
+          <div class="prev-kv"><span>Nazwa</span><br>${esc(d.seller_name||'—')}</div>
+          <div class="prev-kv"><span>NIP</span><br>${esc(d.seller_tax_no||'—')}</div>
+        </div>
+      </div>
+
+      <div class="prev-section">
+        <h4>Nabywca</h4>
+        <div class="prev-grid">
+          <div class="prev-kv"><span>Nazwa</span><br>${esc(d.buyer_name||'—')}</div>
+          <div class="prev-kv"><span>NIP</span><br>${esc(d.buyer_tax_no||'—')}</div>
+          <div class="prev-kv"><span>Adres</span><br>${esc(d.buyer_street||'—')}</div>
+          <div class="prev-kv"><span>Miejscowość</span><br>${esc(d.buyer_city||'—')}</div>
+        </div>
+      </div>
+
+      ${positions.length ? `
+      <div class="prev-section">
+        <h4>Pozycje</h4>
+        <table class="prev-positions">
+          <thead><tr>
+            <th>Nazwa</th><th>Ilość</th><th>VAT</th>
+            <th class="num">Netto</th><th class="num">VAT</th><th class="num">Brutto</th>
+          </tr></thead>
+          <tbody>${posRows}</tbody>
+          <tfoot><tr>
+            <td colspan="3" style="text-align:right;color:#555;font-weight:normal;">SUMA</td>
+            <td class="num">${fmt(d.price_net)} ${currency}</td>
+            <td class="num">${fmt(d.price_vat)} ${currency}</td>
+            <td class="num">${fmt(d.price_gross)} ${currency}</td>
+          </tr></tfoot>
+        </table>
+      </div>` : `
+      <div class="prev-section prev-grid">
+        <div class="prev-kv"><span>Netto</span><br>${fmt(d.price_net)} ${currency}</div>
+        <div class="prev-kv"><span>VAT</span><br>${fmt(d.price_vat)} ${currency}</div>
+        <div class="prev-kv"><span>Brutto</span><br>${fmt(d.price_gross)} ${currency}</div>
+      </div>`}
+
+      ${d.description ? `<div class="prev-section"><h4>Opis</h4><p style="font-size:.85rem">${esc(d.description)}</p></div>` : ''}
+    `;
+  }
+
+  async function openPreview(apiId) {
+    overlay.classList.add('open');
+    document.getElementById('prev-title').textContent = 'Ładowanie…';
+    body.innerHTML = '<div id="prev-loader">Ładowanie…</div>';
+    try {
+      const r = await fetch('/api/invoice-preview?api_id=' + encodeURIComponent(apiId));
+      const d = await r.json();
+      if (d.error) {
+        document.getElementById('prev-title').textContent = 'Błąd';
+        body.innerHTML = `<div id="prev-error">${esc(d.error)}</div>`;
+        return;
+      }
+      body.innerHTML = renderPreview(d);
+    } catch (e) {
+      body.innerHTML = `<div id="prev-error">Błąd połączenia: ${esc(e.message)}</div>`;
+    }
+  }
+
+  // Row click via delegation (works with DataTables pagination)
+  document.getElementById('invoices-table').addEventListener('click', function(e) {
+    if (e.target.closest('.btn-del, form')) return;
+    const row = e.target.closest('tr.inv-row');
+    if (!row) return;
+    const apiId = row.dataset.apiId;
+    if (!apiId) return;
+    openPreview(apiId);
+  });
+
+  // Close
+  document.getElementById('prev-close').addEventListener('click', function() {
+    overlay.classList.remove('open');
+  });
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) overlay.classList.remove('open');
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') overlay.classList.remove('open');
+  });
+})();
 </script>
 </body>
 </html>

@@ -294,45 +294,17 @@
     "vat_rate": "23%"
   },
   {
-    "file_id": "1f6h3oHTNT3q4Vno_cJOJAUgCbX3eY0iN",
-    "filename": "faktura_WH_522430_2026 (1).pdf",
-    "extracted": "2026-06-09T12:27:30.900615",
-    "number": "WH/522430/2026",
-    "date": "2026-05-02",
-    "seller": "PKP Intercity S.A.",
-    "buyer": "Łukasz Brzyski Trustart",
-    "net": 31.3,
-    "vat_amount": 2.5,
-    "gross": 33.8,
-    "currency": "PLN",
-    "vat_rate": "8%"
-  },
-  {
-    "file_id": "1JH7t0xhW4QMq8vu2grUTQwfahe8ZNRIE",
-    "filename": "faktura_WH_522429_2026 (1).pdf",
-    "extracted": "2026-06-09T12:27:37.089637",
-    "number": "WH/522429/2026",
-    "date": "2026-05-02",
-    "seller": "PKP Intercity S.A.",
-    "buyer": "Łukasz Brzyski Trustart",
-    "net": 86.06,
-    "vat_amount": 6.89,
-    "gross": 92.95,
-    "currency": "PLN",
-    "vat_rate": "8%"
-  },
-  {
-    "file_id": "1zcwN8uu7rXgMYvpGsU7yRlG2tdqiRgOi",
-    "filename": "faktura_WH_522428_2026 (1).pdf",
-    "extracted": "2026-06-09T12:27:42.466849",
-    "number": "WH/522428/2026",
-    "date": "2026-05-02",
-    "seller": "PKP Intercity S.A.",
-    "buyer": "Łukasz Brzyski Trustart",
-    "net": 73.15,
-    "vat_amount": 5.85,
-    "gross": 79.0,
-    "currency": "PLN",
-    "vat_rate": "8%"
+    "file_id": "1bpP8N1QDKznsMRDaaILzzKU8vPLlZD65",
+    "filename": "Invoice-CXHRDSAO-0005 (1).pdf",
+    "extracted": "2026-06-10T14:17:12+02:00",
+    "number": "CXHRDSAO-0005",
+    "date": "2026-05-30",
+    "seller": "Anthropic, PBC",
+    "buyer": "Lukasz",
+    "net": 38.25,
+    "vat_amount": 0,
+    "gross": 38.25,
+    "currency": "EUR",
+    "vat_rate": "0%"
   }
 ]
