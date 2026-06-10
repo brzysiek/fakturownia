@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zestawienie</title>
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.0.8/css/dataTables.dataTables.min.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #222; }
+    .container { width: 90%; max-width: 1600px; margin: 40px auto; padding: 0 16px; }
+
+    .tabs { display: flex; margin-bottom: 24px; border-bottom: 2px solid #e5e7eb; flex-wrap: wrap; }
+    .tabs a {
+      padding: 10px 20px; font-size: 0.95rem; font-weight: 500;
+      text-decoration: none; color: #555; border-bottom: 2px solid transparent; margin-bottom: -2px;
+    }
+    .tabs a:hover { color: #2563eb; }
+    .tabs a.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+
+    .filters {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+      padding: 14px 20px; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+    }
+    .filter-group { display: flex; align-items: center; gap: 8px; }
+    .filter-group label { font-size: 0.8rem; color: #555; font-weight: 600; white-space: nowrap; }
+    .filter-group select { padding: 7px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; min-width: 160px; }
+
+    .alert-invoice-only {
+      background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px;
+      padding: 12px 18px; margin-bottom: 12px; font-size: 0.9rem; color: #92400e;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .alert-invoice-only strong { font-size: 1.05rem; }
+    .alert-invoice-only a { color: #b45309; font-weight: 600; text-decoration: none; }
+    .alert-invoice-only a:hover { text-decoration: underline; }
+
+    .alert-ksef-unpaid {
+      background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px;
+      padding: 12px 18px; margin-bottom: 16px; font-size: 0.9rem; color: #991b1b;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .alert-ksef-unpaid strong { font-size: 1.05rem; }
+    .alert-ksef-unpaid a { color: #b91c1c; font-weight: 600; text-decoration: none; }
+    .alert-ksef-unpaid a:hover { text-decoration: underline; }
+
+    .empty { text-align: center; color: #9ca3af; padding: 40px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; }
+
+    .dt-container { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+    .dt-layout-row { margin-bottom: 12px; }
+    .dt-search input { padding: 7px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; }
+    .dt-length select { padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; }
+    .dt-paging .dt-paging-button { padding: 4px 10px; border-radius: 5px; cursor: pointer; }
+    .dt-paging .dt-paging-button.current { background: #2563eb; color: #fff !important; }
+    .dt-paging .dt-paging-button:hover:not(.current) { background: #e5e7eb; }
+
+    table.dataTable { width: 100% !important; border-collapse: collapse !important; }
+    table.dataTable thead th {
+      font-size: 0.75rem; color: #555; text-transform: uppercase; letter-spacing: 0.04em;
+      border-bottom: 2px solid #e5e7eb !important; background: #f9fafb;
+      padding: 10px 13px; white-space: nowrap;
+    }
+    table.dataTable tbody td { padding: 9px 13px; font-size: 0.87rem; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+    table.dataTable tbody tr:last-child td { border-bottom: none; }
+
+    /* Row coloring */
+    table.dataTable tbody tr.row-matched td { background: #f0fdf4 !important; }
+    table.dataTable tbody tr.row-matched:hover td { background: #dcfce7 !important; }
+    table.dataTable tbody tr.row-invoice-only td { background: #fffbeb !important; }
+    table.dataTable tbody tr.row-invoice-only:hover td { background: #fef3c7 !important; }
+    table.dataTable tbody tr.row-ksef-unpaid td { background: #fef2f2 !important; }
+    table.dataTable tbody tr.row-ksef-unpaid:hover td { background: #fee2e2 !important; }
+    table.dataTable tbody tr.row-skipped td { background: #f3f4f6 !important; }
+    table.dataTable tbody tr.row-skipped:hover td { background: #e5e7eb !important; }
+
+    .num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .positive { color: #15803d; }
+    .negative { color: #b91c1c; }
+    .foreign-note { font-size: 0.75rem; color: #6b7280; display: block; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.76rem; font-weight: 600; white-space: nowrap; }
+    .badge-income          { background: #dcfce7; color: #15803d; }
+    .badge-cost            { background: #fee2e2; color: #b91c1c; }
+    .badge-dysk-src        { background: #e0f2fe; color: #0369a1; }
+    .badge-ksef-cost       { background: #ede9fe; color: #6d28d9; }
+    .badge-ksef-income     { background: #f5f3ff; color: #7c3aed; }
+    .badge-matched         { background: #dcfce7; color: #166534; }
+    .badge-invoice-only    { background: #fef3c7; color: #92400e; }
+    .badge-bank-only       { background: #f3f4f6; color: #6b7280; }
+    .badge-skip            { background: #f3f4f6; color: #6b7280; }
+    .badge-paid            { background: #dcfce7; color: #15803d; }
+    .badge-unpaid          { background: #fef9c3; color: #854d0e; }
+    .badge-overdue         { background: #fee2e2; color: #b91c1c; }
+    .badge-partial         { background: #fef3c7; color: #b45309; }
+    .badge-other-status    { background: #f3f4f6; color: #555; }
+
+    .filename-note { font-size: 0.75rem; color: #9ca3af; display: block; margin-top: 2px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <nav class="tabs">
+    <a href="/kosztowe"         class="{{ 'active' if active == 'kosztowe' }}">Kosztowe KSeF</a>
+    <a href="/przychodowe"      class="{{ 'active' if active == 'przychodowe' }}">Przychodowe KSeF</a>
+    <a href="/transakcje"       class="{{ 'active' if active == 'transakcje' }}">Transakcje bankowe</a>
+    <a href="/faktury-na-dysku" class="{{ 'active' if active == 'faktury-na-dysku' }}">Faktury z dysku</a>
+    <a href="/zestawienie"      class="{{ 'active' if active == 'zestawienie' }}">Zestawienie</a>
+    <a href="/ustawienia"       class="{{ 'active' if active == 'ustawienia' }}">Ustawienia</a>
+  </nav>
+
+  <form class="filters" method="get" action="/zestawienie">
+    <div class="filter-group">
+      <label>Miesiąc</label>
+      <select name="month" onchange="this.form.submit()">
+        <option value="">Wszystkie</option>
+        {% for m in months %}
+        <option value="{{ m }}" {% if m == sel_month %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Pokaż</label>
+      <select name="filter" onchange="this.form.submit()">
+        <option value=""             {% if sel_filter == '' %}selected{% endif %}>Wszystkie</option>
+        <option value="invoice_only" {% if sel_filter == 'invoice_only' %}selected{% endif %}>Tylko faktury bez transakcji</option>
+        <option value="bank_only"    {% if sel_filter == 'bank_only' %}selected{% endif %}>Tylko transakcje bez faktury</option>
+        <option value="matched"      {% if sel_filter == 'matched' %}selected{% endif %}>Tylko dopasowane</option>
+        <option value="ksef_unpaid"  {% if sel_filter == 'ksef_unpaid' %}selected{% endif %}>Nieopłacone KSeF</option>
+      </select>
+    </div>
+  </form>
+
+  {% if count_invoice_only > 0 and sel_filter != 'invoice_only' %}
+  <div class="alert-invoice-only">
+    ⚠ <strong>{{ count_invoice_only }}</strong>
+    {% if count_invoice_only == 1 %}faktura bez transakcji bankowej{% else %}faktury bez transakcji bankowej{% endif %}
+    — łącznie <strong>{{ "%.2f"|format(sum_invoice_only) }}</strong> PLN/waluta
+    &nbsp;·&nbsp;
+    <a href="/zestawienie?month={{ sel_month }}&filter=invoice_only">Pokaż tylko te →</a>
+  </div>
+  {% endif %}
+
+  {% if count_ksef_unpaid > 0 and sel_filter != 'ksef_unpaid' %}
+  <div class="alert-ksef-unpaid">
+    ⚠ <strong>{{ count_ksef_unpaid }}</strong>
+    {% if count_ksef_unpaid == 1 %}nieopłacona faktura KSeF{% else %}nieopłacone faktury KSeF{% endif %}
+    &nbsp;·&nbsp;
+    <a href="/zestawienie?month={{ sel_month }}&filter=ksef_unpaid">Pokaż tylko te →</a>
+  </div>
+  {% endif %}
+
+  {% if rows %}
+  <div class="dt-container">
+  <table id="z-table">
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Podmiot</th>
+        <th>Opis / Numer</th>
+        <th>Typ</th>
+        <th class="num">Kwota</th>
+        <th>Waluta</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      {% if row.source == 'bank' and row.skipped %}
+        {% set row_cls = 'row-skipped' %}
+      {% elif row.status == 'matched' %}
+        {% set row_cls = 'row-matched' %}
+      {% elif row.status == 'invoice_only' %}
+        {% set row_cls = 'row-invoice-only' %}
+      {% elif row.source == 'ksef' and row.payment_status and row.payment_status not in ('Opłacona', 'Anulowana', 'Szkic') %}
+        {% set row_cls = 'row-ksef-unpaid' %}
+      {% else %}
+        {% set row_cls = '' %}
+      {% endif %}
+      <tr class="{{ row_cls }}">
+        <td data-order="{{ row.full_date }}">{{ row.date }}</td>
+        <td>{{ row.who }}</td>
+        <td>
+          {{ row.desc }}
+          {% if row.filename %}<span class="filename-note">{{ row.filename }}</span>{% endif %}
+        </td>
+        <td>
+          {% if row.source == 'bank' %}
+            {% if row.typ == 'income' %}
+              <span class="badge badge-income">Przychód</span>
+            {% else %}
+              <span class="badge badge-cost">Koszt</span>
+            {% endif %}
+          {% elif row.source == 'dysk' %}
+            <span class="badge badge-dysk-src">Faktura z dysku</span>
+          {% elif row.source == 'ksef' %}
+            {% if row.ksef_type == 'cost' %}
+              <span class="badge badge-ksef-cost">KSeF koszt.</span>
+            {% else %}
+              <span class="badge badge-ksef-income">KSeF przych.</span>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td class="num {% if row.source == 'bank' %}{% if row.amount >= 0 %}positive{% else %}negative{% endif %}{% endif %}">
+          {% if row.source == 'bank' %}
+            {{ "%+.2f"|format(row.amount) }}
+            {% if row.foreign %}<span class="foreign-note">{{ row.foreign }}</span>{% endif %}
+          {% else %}
+            {{ "%.2f"|format(row.amount) }}
+          {% endif %}
+        </td>
+        <td>{{ row.currency }}</td>
+        <td>
+          {% if row.source == 'ksef' %}
+            {% if row.payment_status == 'Opłacona' %}
+              <span class="badge badge-paid">Opłacona</span>
+            {% elif row.payment_status == 'Przeterminowana' %}
+              <span class="badge badge-overdue">Przeterminowana</span>
+            {% elif row.payment_status in ('Nieopłacona', 'Wysłana', 'Wystawiona') %}
+              <span class="badge badge-unpaid">{{ row.payment_status }}</span>
+            {% elif row.payment_status == 'Częściowo opłacona' %}
+              <span class="badge badge-partial">{{ row.payment_status }}</span>
+            {% elif row.payment_status %}
+              <span class="badge badge-other-status">{{ row.payment_status }}</span>
+            {% endif %}
+          {% elif row.status == 'invoice_only' %}
+            <span class="badge badge-invoice-only">Brak transakcji</span>
+          {% elif row.status == 'matched' %}
+            <span class="badge badge-matched">Dopasowane</span>
+          {% else %}
+            <span class="badge badge-bank-only">Tylko bank</span>
+          {% endif %}
+          {% if row.source == 'bank' and row.skipped %}
+            <span class="badge badge-skip">Pominięte</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  {% else %}
+  <p class="empty">
+    {% if not months %}
+      Brak danych — odśwież transakcje bankowe i przetwórz faktury z dysku.
+    {% else %}
+      Brak wpisów dla wybranych filtrów.
+    {% endif %}
+  </p>
+  {% endif %}
+
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/2.0.8/js/dataTables.min.js"></script>
+<script>
+$(function () {
+  if (!$('#z-table').length) return;
+  $('#z-table').DataTable({
+    order: [[0, 'desc']],
+    pageLength: 25,
+    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'Wszystkie']],
+    columnDefs: [
+      { targets: [4], className: 'num' },
+      { targets: [6], orderable: false, searchable: false },
+    ],
+    language: {
+      search:       'Szukaj:',
+      lengthMenu:   'Pokaż _MENU_ wpisów',
+      info:         'Pozycje _START_–_END_ z _TOTAL_',
+      infoEmpty:    'Brak wyników',
+      infoFiltered: '(przefiltrowano z _MAX_ wpisów)',
+      paginate:     { previous: '‹', next: '›' },
+      zeroRecords:  'Brak pasujących wyników',
+      emptyTable:   'Brak danych',
+    },
+  });
+});
+</script>
+</body>
+</html>
