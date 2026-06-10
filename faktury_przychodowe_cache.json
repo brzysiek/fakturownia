@@ -1,5 +1,5 @@
 {
-  "updated": "2026-06-09T11:54:00.552325",
+  "updated": "2026-06-10T07:05:56+02:00",
   "invoices": [
     {
       "number": "K2",
@@ -12,7 +12,7 @@
       "gross": -6150.0,
       "vat": -1150.0,
       "currency": "PLN",
-      "status": "Wystawiona",
+      "status": "Opłacona",
       "ksef": true
     },
     {

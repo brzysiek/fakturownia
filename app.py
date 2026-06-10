@@ -5,6 +5,13 @@ import hashlib
 import json
 import os
 from datetime import date as date_type, datetime
+from zoneinfo import ZoneInfo
+
+_TZ_PL = ZoneInfo("Europe/Warsaw")
+
+
+def _now_pl():
+    return datetime.now(_TZ_PL).isoformat(timespec="seconds")
 
 import google.generativeai as genai
 import requests
@@ -26,6 +33,7 @@ TRANSACTIONS_CACHE    = os.path.join(os.path.dirname(__file__), "transakcje_cach
 INVOICES_COST_CACHE   = os.path.join(os.path.dirname(__file__), "faktury_kosztowe_cache.json")
 INVOICES_INCOME_CACHE = os.path.join(os.path.dirname(__file__), "faktury_przychodowe_cache.json")
 MANUAL_ACTIONS_FILE   = os.path.join(os.path.dirname(__file__), "manual_actions.json")
+DRIVE_FILES_CACHE     = os.path.join(os.path.dirname(__file__), "faktury_dysk_cache.json")
 
 STATUS_LABELS = {
     "issued": "Wystawiona",
@@ -106,7 +114,7 @@ def _invoices_cache_path(invoice_type):
 def _save_invoices_cache(invoice_type, invoices, months, total_net, total_gross, total_vat, error):
     with open(_invoices_cache_path(invoice_type), "w", encoding="utf-8") as f:
         json.dump({
-            "updated":     datetime.utcnow().isoformat(),
+            "updated":     _now_pl(),
             "invoices":    invoices,
             "months":      months,
             "total_net":   total_net,
@@ -135,6 +143,19 @@ def load_manual_actions():
 def save_manual_actions(actions):
     with open(MANUAL_ACTIONS_FILE, "w", encoding="utf-8") as f:
         json.dump(actions, f, ensure_ascii=False, indent=2)
+
+
+def _load_drive_cache():
+    """Return full drive cache dict keyed by 'YYYY-MM'."""
+    if not os.path.exists(DRIVE_FILES_CACHE):
+        return {}
+    with open(DRIVE_FILES_CACHE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _save_drive_cache(data):
+    with open(DRIVE_FILES_CACHE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 @app.route("/")
@@ -441,7 +462,7 @@ def _build_transactions():
 def _save_transactions_cache(transactions, months):
     with open(TRANSACTIONS_CACHE, "w", encoding="utf-8") as f:
         json.dump({
-            "updated":      datetime.utcnow().isoformat(),
+            "updated":      _now_pl(),
             "transactions": transactions,
             "months":       months,
         }, f, ensure_ascii=False, indent=2)
@@ -657,23 +678,78 @@ def drive_month_options():
 
 @app.route("/faktury-na-dysku")
 def faktury_na_dysku():
-    opts    = drive_month_options()
+    opts = drive_month_options()
     def_y, def_m = opts[0]
     sel_year  = int(request.args.get("year",  def_y))
     sel_month = int(request.args.get("month", def_m))
+    error     = request.args.get("error", "")
 
-    files, error = load_drive_files(sel_year, sel_month)
-    processed_ids = {e["file_id"] for e in load_ocr_data()}
+    key        = f"{sel_year}-{sel_month:02d}"
+    cache      = _load_drive_cache()
+    month_data = cache.get(key, {})
+    files          = month_data.get("files", [])
+    cache_updated  = month_data.get("updated", "")
+
+    ocr_map = {e["file_id"]: e for e in load_ocr_data()}
+
+    rows = []
+    for f in files:
+        ocr = ocr_map.get(f["id"])
+        rows.append({
+            "id":         f["id"],
+            "name":       f["name"],
+            "link":       f.get("link", ""),
+            "processed":  ocr is not None,
+            "date":       (ocr.get("date")      or "") if ocr else "",
+            "number":     (ocr.get("number")    or "") if ocr else "",
+            "seller":     (ocr.get("seller")    or "") if ocr else "",
+            "net":        ocr.get("net")                if ocr else None,
+            "vat_amount": ocr.get("vat_amount")         if ocr else None,
+            "gross":      ocr.get("gross")              if ocr else None,
+            "currency":   (ocr.get("currency")  or "PLN") if ocr else "",
+        })
+
+    total_net   = sum(float(r["net"]        or 0) for r in rows if r["processed"] and r["net"]        is not None)
+    total_vat   = sum(float(r["vat_amount"] or 0) for r in rows if r["processed"] and r["vat_amount"] is not None)
+    total_gross = sum(float(r["gross"]      or 0) for r in rows if r["processed"] and r["gross"]      is not None)
+    count_new   = sum(1 for r in rows if not r["processed"])
+
     return render_template("drive.html",
         active="faktury-na-dysku",
-        files=files,
+        rows=rows,
         error=error,
+        cache_updated=cache_updated,
         month_options=opts,
         sel_year=sel_year,
         sel_month=sel_month,
         api_configured=bool(GDRIVE_API_KEY),
-        processed_ids=processed_ids,
+        total_net=total_net,
+        total_vat=total_vat,
+        total_gross=total_gross,
+        count_new=count_new,
     )
+
+
+@app.route("/faktury-na-dysku/odswiez", methods=["POST"])
+def faktury_na_dysku_odswiez():
+    opts = drive_month_options()
+    def_y, def_m = opts[0]
+    sel_year  = int(request.form.get("year",  def_y))
+    sel_month = int(request.form.get("month", def_m))
+
+    files, fetch_error = load_drive_files(sel_year, sel_month)
+    if not fetch_error:
+        key   = f"{sel_year}-{sel_month:02d}"
+        cache = _load_drive_cache()
+        cache[key] = {
+            "updated": _now_pl(),
+            "files":   files,
+        }
+        _save_drive_cache(cache)
+        return redirect(url_for("faktury_na_dysku", year=sel_year, month=sel_month))
+    else:
+        return redirect(url_for("faktury_na_dysku", year=sel_year, month=sel_month,
+                                error=fetch_error))
 
 
 # ── OCR / LLM invoice extraction ─────────────────────────────────────────────
@@ -753,7 +829,7 @@ def save_ocr_entry(file_id, filename, data):
     entries.append({
         "file_id":   file_id,
         "filename":  filename,
-        "extracted": datetime.utcnow().isoformat(),
+        "extracted": _now_pl(),
         **data,
     })
     with open(OCR_DATA_FILE, "w", encoding="utf-8") as f:
@@ -784,35 +860,203 @@ def przetworz_faktury():
     return jsonify({"results": results})
 
 
-@app.route("/faktury-google")
-def faktury_google():
-    entries    = load_ocr_data()
-    all_months = sorted({e.get("date", "")[:7] for e in entries if e.get("date", "")}, reverse=True)
-    sel_month  = request.args.get("month", "")
-    if not sel_month and all_months:
-        sel_month = all_months[0]
-    filtered = [e for e in entries if not sel_month or (e.get("date") or "")[:7] == sel_month]
-    total_net   = sum(float(e.get("net")        or 0) for e in filtered)
-    total_vat   = sum(float(e.get("vat_amount") or 0) for e in filtered)
-    total_gross = sum(float(e.get("gross")      or 0) for e in filtered)
-    return render_template("invoices_google.html",
-        active="faktury-google",
-        entries=filtered,
-        months=all_months,
-        sel_month=sel_month,
-        total_net=total_net,
-        total_vat=total_vat,
-        total_gross=total_gross)
-
-
-@app.route("/faktury-google/usun", methods=["POST"])
-def faktury_google_usun():
+@app.route("/faktury-na-dysku/usun", methods=["POST"])
+def faktury_na_dysku_usun():
     file_id = request.form.get("file_id", "")
     if file_id:
         entries = [e for e in load_ocr_data() if e.get("file_id") != file_id]
         with open(OCR_DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(entries, f, ensure_ascii=False, indent=2)
-    return redirect(url_for("faktury_google"))
+    return redirect(url_for("faktury_na_dysku"))
+
+
+@app.route("/zestawienie")
+def zestawienie():
+    tx_cache    = _load_transactions_cache()
+    ocr_entries = load_ocr_data()
+    cost_cache  = _load_invoices_cache("cost")
+    inc_cache   = _load_invoices_cache("income")
+
+    all_cost_invs = cost_cache["invoices"]   if cost_cache else []
+    all_inc_invs  = inc_cache["invoices"]    if inc_cache  else []
+
+    # Collect months from all sources
+    months_tx   = set(tx_cache["months"]) if tx_cache else set()
+    months_ocr  = {e.get("date", "")[:7] for e in ocr_entries if e.get("date")}
+    months_ksef = {i.get("month", "") for i in all_cost_invs + all_inc_invs if i.get("month")}
+    all_months  = sorted(months_tx | months_ocr | months_ksef, reverse=True)
+
+    sel_month  = request.args.get("month",  all_months[0] if all_months else "")
+    sel_filter = request.args.get("filter", "")
+
+    # Filter each source by month
+    all_bank    = tx_cache["transactions"] if tx_cache else []
+    bank_txs    = [t for t in all_bank      if not sel_month or t.get("month") == sel_month]
+    drive_invs  = [e for e in ocr_entries   if not sel_month or (e.get("date") or "")[:7] == sel_month]
+    cost_invs   = [i for i in all_cost_invs if not sel_month or i.get("month") == sel_month]
+    inc_invs    = [i for i in all_inc_invs  if not sel_month or i.get("month") == sel_month]
+
+    # Build matching lists (with tracking IDs)
+    ocr_for_match = [{
+        "number":    (e.get("number")   or "").strip(),
+        "gross":     float(e.get("gross") or 0),
+        "full_date": (e.get("date")     or "").strip(),
+        "currency":  (e.get("currency") or "PLN").strip(),
+        "ksef":      False,
+        "_file_id":  e.get("file_id",   ""),
+        "_ksef_id":  "",
+    } for e in drive_invs]
+
+    ksef_for_match = []
+    for inv in cost_invs:
+        kid = f"cost_{inv.get('full_date','')}_{inv.get('number','')}"
+        ksef_for_match.append({
+            "number":    (inv.get("number")   or "").strip(),
+            "gross":     float(inv.get("gross") or 0),
+            "full_date": (inv.get("full_date") or "").strip(),
+            "currency":  (inv.get("currency")  or "PLN").strip(),
+            "ksef":      True,
+            "_file_id":  "",
+            "_ksef_id":  kid,
+        })
+    for inv in inc_invs:
+        kid = f"income_{inv.get('full_date','')}_{inv.get('number','')}"
+        ksef_for_match.append({
+            "number":    (inv.get("number")   or "").strip(),
+            "gross":     float(inv.get("gross") or 0),
+            "full_date": (inv.get("full_date") or "").strip(),
+            "currency":  (inv.get("currency")  or "PLN").strip(),
+            "ksef":      True,
+            "_file_id":  "",
+            "_ksef_id":  kid,
+        })
+
+    all_for_match    = ocr_for_match + ksef_for_match
+    matched_file_ids = set()
+    matched_ksef_ids = set()
+
+    keywords       = load_keywords()
+    manual_actions = load_manual_actions()
+
+    bank_rows = []
+    for tx in bank_txs:
+        matched = find_matching_invoice(tx, all_for_match)
+        if matched:
+            if matched["_file_id"]: matched_file_ids.add(matched["_file_id"])
+            if matched["_ksef_id"]: matched_ksef_ids.add(matched["_ksef_id"])
+            status = "matched"
+        else:
+            status = "bank_only"
+        tx_skipped = (
+            row_class(tx, keywords) == "row-grey"
+            or manual_actions.get(tx.get("tx_id", ""), "") == "skip"
+        )
+        bank_rows.append({
+            "source":         "bank",
+            "date":           tx["date"],
+            "full_date":      tx["full_date"],
+            "who":            tx["kontrahent"],
+            "desc":           tx["details"],
+            "amount":         tx["amount"],
+            "currency":       tx.get("currency", "PLN"),
+            "foreign":        tx.get("foreign", ""),
+            "typ":            tx.get("typ", "cost"),
+            "status":         status,
+            "skipped":        tx_skipped,
+            "filename":       "",
+            "payment_status": "",
+        })
+
+    drive_rows = []
+    for e in drive_invs:
+        fid    = e.get("file_id", "")
+        status = "matched" if fid in matched_file_ids else "invoice_only"
+        drive_rows.append({
+            "source":         "dysk",
+            "date":           e.get("date", ""),
+            "full_date":      e.get("date", ""),
+            "who":            e.get("seller") or "",
+            "desc":           e.get("number") or "",
+            "amount":         float(e.get("gross") or 0),
+            "currency":       e.get("currency") or "PLN",
+            "foreign":        "",
+            "typ":            "dysk",
+            "status":         status,
+            "filename":       e.get("filename", ""),
+            "payment_status": "",
+        })
+
+    ksef_rows = []
+    for inv in cost_invs:
+        kid    = f"cost_{inv.get('full_date','')}_{inv.get('number','')}"
+        status = "matched" if kid in matched_ksef_ids else "invoice_only"
+        ksef_rows.append({
+            "source":         "ksef",
+            "ksef_type":      "cost",
+            "date":           inv.get("date", ""),
+            "full_date":      inv.get("full_date", ""),
+            "who":            inv.get("seller") or inv.get("buyer") or "",
+            "desc":           inv.get("number") or "",
+            "amount":         -float(inv.get("gross") or 0),
+            "currency":       inv.get("currency") or "PLN",
+            "foreign":        "",
+            "typ":            "ksef_cost",
+            "status":         status,
+            "filename":       "",
+            "payment_status": inv.get("status") or "",
+        })
+    for inv in inc_invs:
+        kid    = f"income_{inv.get('full_date','')}_{inv.get('number','')}"
+        status = "matched" if kid in matched_ksef_ids else "invoice_only"
+        ksef_rows.append({
+            "source":         "ksef",
+            "ksef_type":      "income",
+            "date":           inv.get("date", ""),
+            "full_date":      inv.get("full_date", ""),
+            "who":            inv.get("buyer") or inv.get("seller") or "",
+            "desc":           inv.get("number") or "",
+            "amount":         float(inv.get("gross") or 0),
+            "currency":       inv.get("currency") or "PLN",
+            "foreign":        "",
+            "typ":            "ksef_income",
+            "status":         status,
+            "filename":       "",
+            "payment_status": inv.get("status") or "",
+        })
+
+    all_combined = bank_rows + drive_rows + ksef_rows
+    all_rows = sorted(all_combined, key=lambda r: r["full_date"] or "", reverse=True)
+
+    inv_only           = [r for r in all_combined if r["status"] == "invoice_only"]
+    count_invoice_only = len(inv_only)
+    sum_invoice_only   = sum(abs(r["amount"]) for r in inv_only)
+    count_ksef_unpaid  = sum(
+        1 for r in ksef_rows
+        if r["payment_status"] and r["payment_status"] not in ("Opłacona", "Anulowana", "Szkic")
+    )
+
+    if sel_filter == "invoice_only":
+        all_rows = [r for r in all_rows if r["status"] == "invoice_only"]
+    elif sel_filter == "bank_only":
+        all_rows = [r for r in all_rows if r["status"] == "bank_only"]
+    elif sel_filter == "matched":
+        all_rows = [r for r in all_rows if r["status"] == "matched"]
+    elif sel_filter == "ksef_unpaid":
+        all_rows = [r for r in all_rows
+                    if r.get("source") == "ksef"
+                    and r.get("payment_status")
+                    and r["payment_status"] not in ("Opłacona", "Anulowana", "Szkic")]
+
+    return render_template("zestawienie.html",
+        active="zestawienie",
+        rows=all_rows,
+        months=all_months,
+        sel_month=sel_month,
+        sel_filter=sel_filter,
+        count_invoice_only=count_invoice_only,
+        sum_invoice_only=sum_invoice_only,
+        count_ksef_unpaid=count_ksef_unpaid,
+    )
 
 
 if __name__ == "__main__":

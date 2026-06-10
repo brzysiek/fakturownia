@@ -9,7 +9,7 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #222; }
-    .container { max-width: 1100px; margin: 40px auto; padding: 0 16px; }
+    .container { width: 90%; max-width: 1600px; margin: 40px auto; padding: 0 16px; }
 
     /* Tabs */
     .tabs { display: flex; margin-bottom: 24px; border-bottom: 2px solid #e5e7eb; }
@@ -82,12 +82,12 @@
 <div class="container">
 
   <nav class="tabs">
-    <a href="/kosztowe"    class="{{ 'active' if active == 'kosztowe' }}">Kosztowe</a>
-    <a href="/przychodowe" class="{{ 'active' if active == 'przychodowe' }}">Przychodowe</a>
-    <a href="/transakcje"        class="{{ 'active' if active == 'transakcje' }}">Transakcje</a>
-    <a href="/faktury-na-dysku"  class="{{ 'active' if active == 'faktury-na-dysku' }}">Wczytaj faktury z dysku</a>
-    <a href="/faktury-google"    class="{{ 'active' if active == 'faktury-google' }}">Faktury na dysku Google</a>
-    <a href="/ustawienia"        class="{{ 'active' if active == 'ustawienia' }}">Ustawienia</a>
+    <a href="/kosztowe"         class="{{ 'active' if active == 'kosztowe' }}">Kosztowe KSeF</a>
+    <a href="/przychodowe"      class="{{ 'active' if active == 'przychodowe' }}">Przychodowe KSeF</a>
+    <a href="/transakcje"       class="{{ 'active' if active == 'transakcje' }}">Transakcje bankowe</a>
+    <a href="/faktury-na-dysku" class="{{ 'active' if active == 'faktury-na-dysku' }}">Faktury z dysku</a>
+    <a href="/zestawienie"      class="{{ 'active' if active == 'zestawienie' }}">Zestawienie</a>
+    <a href="/ustawienia"       class="{{ 'active' if active == 'ustawienia' }}">Ustawienia</a>
   </nav>
 
   <div class="toolbar">
